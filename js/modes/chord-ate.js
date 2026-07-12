@@ -1,7 +1,7 @@
 // 和音当て: 構成音の音名当て。出題は和声的（コード）／フリー選択可
 import { NOTE_NAMES_DOREMI, NOTE_NAMES_ABC } from '../theory.js';
+import { resolveQuestionCount } from '../identity.js';
 
-const TOTAL = 10;
 const MIDI_MIN = 48;
 const MIDI_MAX = 71;
 
@@ -119,15 +119,16 @@ export default {
     const style = opts.noteStyle || opts.settings?.noteStyle || 'doremi';
     const names = style === 'abc' ? NOTE_NAMES_ABC : NOTE_NAMES_DOREMI;
     const options = names.map((label, pc) => ({ pc, label }));
+    const total = resolveQuestionCount(opts.settings);
     let asked = 0;
     let correctCount = 0;
     let prevKey = '';
 
     return {
-      total: TOTAL,
+      total,
       next(prevCorrect) {
         if (prevCorrect) correctCount++;
-        if (asked >= TOTAL) return null;
+        if (asked >= total) return null;
         asked++;
 
         let midis;
@@ -182,8 +183,8 @@ export default {
         };
       },
       summary() {
-        const accuracy = TOTAL ? correctCount / TOTAL : 0;
-        return { accuracy, detail: `${correctCount}/${TOTAL}問正解` };
+        const accuracy = total ? correctCount / total : 0;
+        return { accuracy, detail: `${correctCount}/${total}問正解` };
       },
     };
   },

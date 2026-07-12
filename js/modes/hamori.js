@@ -1,6 +1,7 @@
 // ハモリ判定。純正とうなりを聴き分ける。ズレ幅はステアケース初期値のみ。
 import { JI_RATIOS, beatRate, freqOfMidi, detune } from '../theory.js';
 import { Staircase, shuffle, pickDifferent } from '../engine.js';
+import { resolveQuestionCount } from '../identity.js';
 
 const RATIO_JA = { P5: '完全5度', P8: 'オクターブ', P4: '完全4度', M3: '長3度', m3: '短3度' };
 const ALL = ['P5', 'P8', 'P4', 'M3', 'm3'];
@@ -15,7 +16,6 @@ const HIBIKI = {
 const START_CENTS = [40, 25, 10, 5];
 const LOW_MIN = 55;
 const LOW_MAX = 69;
-const TOTAL = 12;
 
 function fmtCents(c) {
   if (Number.isInteger(c) || c >= 10) return String(Math.round(c));
@@ -68,11 +68,14 @@ export default {
     return { value: best, display: `${fmtCents(best)}セント` };
   },
   needsFingerboard: false,
-  createRound(config = {}, rng) {
+  createRound(config = {}, rng, opts = {}) {
     const ratios = HIBIKI[config.hibiki] || HIBIKI.P5;
     const start = resolveStart(config);
     const sc = new Staircase({ start, min: 2, max: 40, down: 0.7, up: 1.5 });
-    const types = shuffle([...Array(TOTAL / 2).fill('pure'), ...Array(TOTAL / 2).fill('mis')], rng);
+    const total = resolveQuestionCount(opts.settings);
+    const pureN = Math.ceil(total / 2);
+    const misN = total - pureN;
+    const types = shuffle([...Array(pureN).fill('pure'), ...Array(misN).fill('mis')], rng);
     let idx = 0;
     let prevRatio = null;
     let lastMis = false;
@@ -115,14 +118,14 @@ export default {
     }
 
     return {
-      total: TOTAL,
+      total,
       next(prevCorrect) {
         if (prevCorrect !== null && prevCorrect !== undefined) {
           answered++;
           if (prevCorrect) correctCount++;
           if (lastMis) sc.report(prevCorrect);
         }
-        if (idx >= TOTAL) return null;
+        if (idx >= total) return null;
         return makeQuestion();
       },
       summary() {

@@ -1,7 +1,7 @@
 // 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
 import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js';
 import { iconEl } from './icons.js';
-import { APP_TITLE, APP_TAG, APP_ICON, APP_TAGLINE, applyIdentity } from '../identity.js';
+import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js';
 import { freqOfMidi, detune } from '../theory.js';
 import { isImageIcon } from './icons.js';
 
@@ -24,10 +24,7 @@ function mount(node, screenClass) {
 function brand() {
   return el('div', { class: 'brand' }, [
     el('img', { class: 'brand-icon', src: APP_ICON, alt: APP_TITLE, width: '40', height: '40' }),
-    el('div', {}, [
-      el('div', { class: 'brand-name' }, APP_TITLE),
-      el('div', { class: 'brand-tag' }, APP_TAG),
-    ]),
+    el('div', { class: 'brand-name' }, APP_TITLE),
   ]);
 }
 
@@ -195,13 +192,6 @@ async function replayPlay(steps) {
 
 function renderHome() {
   applyIdentity();
-  const hero = el('div', { class: 'home-hero' }, [
-    el('div', { class: 'home-hero-mark' }, [
-      el('img', { src: APP_ICON, alt: '', width: '72', height: '72' }),
-    ]),
-    el('h1', { class: 'home-title' }, APP_TITLE),
-    el('p', { class: 'home-tagline' }, APP_TAGLINE),
-  ]);
   const list = el('div', { class: 'game-list' });
   for (const mode of deps.modes) {
     list.appendChild(gameCard(mode, { best: bestFor(mode) }, () => nav.show('setup', { modeId: mode.id })));
@@ -210,7 +200,7 @@ function renderHome() {
     brand(),
     iconButton('settings', () => nav.show('settings'), { label: '設定' }),
   ]);
-  mount(el('div', { class: 'screen home' }, [top, hero, list]), 'home');
+  mount(el('div', { class: 'screen home' }, [top, list]), 'home');
 }
 
 function renderSetup(params = {}) {
@@ -229,9 +219,8 @@ function renderSetup(params = {}) {
 
   const bannerChildren = [];
   if (isImageIcon(mode.icon)) {
-    bannerChildren.push(el('div', { class: 'setup-bleed', style: { backgroundImage: `url(${mode.icon})` } }));
     bannerChildren.push(
-      el('div', { class: 'setup-icon is-image' }, [el('img', { src: mode.icon, alt: '', width: '72', height: '72' })])
+      el('div', { class: 'setup-icon is-image' }, [el('img', { src: mode.icon, alt: '', width: '64', height: '64' })])
     );
   } else {
     bannerChildren.push(el('div', { class: 'setup-icon' }, mode.icon));
@@ -425,7 +414,7 @@ function renderResult(params = {}) {
 }
 
 function renderSettings() {
-  const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8 };
+  const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8, questionCount: 10 };
   const top = el('div', { class: 'top-row' }, [
     iconButton('back', () => nav.show('home'), { label: '戻る' }),
     el('div', { class: 'screen-title' }, '設定'),
@@ -454,6 +443,16 @@ function renderSettings() {
     }
     return el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, label), row]);
   }
+
+  const questionBlock = chipRow(
+    '問題数',
+    QUESTION_COUNTS.map((n) => ({ label: `${n}問`, value: n })),
+    s.questionCount ?? 10,
+    (v) => {
+      s.questionCount = v;
+      deps.onSettingsChange?.({ questionCount: v });
+    }
+  );
 
   const a4Block = chipRow(
     '基準音 A4',
@@ -495,13 +494,11 @@ function renderSettings() {
   mount(
     el('div', { class: 'screen settings' }, [
       top,
-      el('div', { class: 'settings-identity shear glass' }, [
+      el('div', { class: 'settings-identity glass' }, [
         el('img', { src: APP_ICON, alt: APP_TITLE, width: '56', height: '56' }),
-        el('div', {}, [
-          el('div', { class: 'brand-name' }, APP_TITLE),
-          el('div', { class: 'brand-tag' }, APP_TAGLINE),
-        ]),
+        el('div', { class: 'brand-name' }, APP_TITLE),
       ]),
+      questionBlock,
       a4Block,
       noteStyleBlock,
       el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, '音量'), volumeInput]),

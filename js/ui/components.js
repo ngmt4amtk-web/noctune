@@ -176,9 +176,6 @@ export function gameCard(mode, info, onClick) {
       onclick: onClick,
     },
     [
-      isImageIcon(mode.icon)
-        ? el('div', { class: 'game-bleed', style: { backgroundImage: `url(${mode.icon})` } })
-        : null,
       modeIconNode(mode),
       el('div', { class: 'game-body' }, [
         el('div', { class: 'game-title' }, mode.title),

@@ -128,17 +128,15 @@ button { font-family: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; }
 .brand-icon {
-  width: 40px; height: 40px;
-  clip-path: polygon(12% 0, 100% 0, 88% 100%, 0 100%);
+  width: 40px; height: 40px; border-radius: 10px;
   object-fit: cover;
   border: 1px solid var(--card-border);
-  box-shadow: 0 0 20px rgba(110, 200, 255, 0.22);
+  box-shadow: 0 0 16px rgba(110, 200, 255, 0.18);
 }
 .brand-name {
   font-family: var(--font-display); font-size: 18px; font-weight: 800;
   letter-spacing: 0.28em; color: var(--ink);
 }
-.brand-tag { display: block; font-size: 10px; color: var(--ink-dim); margin-top: 2px; letter-spacing: 0.18em; }
 
 .glass {
   background: var(--surface); border: 1px solid var(--card-border);
@@ -146,31 +144,11 @@ button { font-family: inherit; color: inherit; }
   backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
 }
 
-/* ===== HOME: ポスター群 ===== */
-.screen.home { padding-top: calc(12px + var(--safe-t)); }
-.home-top { margin-bottom: 8px; }
-.home-hero {
-  position: relative; margin: 4px 0 22px; padding: 8px 4px 18px;
-  clip-path: polygon(0 0, 100% 6%, 100% 100%, 0 94%);
-}
-.home-hero-mark {
-  width: 72px; height: 72px; margin-bottom: 14px;
-  filter: drop-shadow(0 0 18px rgba(110, 200, 255, 0.35));
-}
-.home-hero-mark img {
-  width: 72px; height: 72px; object-fit: cover;
-  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
-}
-.home-title {
-  margin: 0; font-family: var(--font-display);
-  font-size: clamp(36px, 11vw, 48px); font-weight: 800;
-  letter-spacing: 0.32em; line-height: 1.05;
-}
-.home-tagline {
-  margin: 10px 0 0; font-size: 12px; color: var(--ink-soft); letter-spacing: 0.12em;
-}
+/* ===== HOME ===== */
+.screen.home { padding-top: calc(14px + var(--safe-t)); }
+.home-top { margin-bottom: 20px; }
 
-.game-list { display: flex; flex-direction: column; gap: 14px; margin-bottom: 8px; }
+.game-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 8px; }
 .game-card {
   display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
   position: relative; overflow: hidden;
@@ -180,7 +158,7 @@ button { font-family: inherit; color: inherit; }
     var(--surface);
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), 0 100%);
   box-shadow: var(--glow);
-  padding: 18px 16px; cursor: pointer; min-height: 96px;
+  padding: 16px 14px; cursor: pointer; min-height: 88px;
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
   transition: transform 0.14s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -190,27 +168,19 @@ button { font-family: inherit; color: inherit; }
   transform: skewY(-8deg);
 }
 .game-card:active { transform: translateX(3px) scale(0.985); }
-.game-bleed {
-  position: absolute; right: -8%; top: -20%; bottom: -20%; width: 46%;
-  background-size: cover; background-position: center;
-  opacity: 0.34; filter: saturate(0.9) brightness(0.95);
-  mask-image: linear-gradient(90deg, transparent, #000 35%);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 35%);
-  pointer-events: none;
-}
 .game-icon {
   width: 56px; height: 56px; flex-shrink: 0; position: relative; z-index: 1;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid color-mix(in srgb, var(--mode-color) 35%, transparent);
-  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
+  border: 1px solid color-mix(in srgb, var(--mode-color) 30%, transparent);
+  border-radius: 12px;
   color: var(--mode-color);
+  overflow: hidden;
 }
 .game-icon.is-image { background: transparent; border: none; padding: 0; }
 .game-icon.is-image img {
-  width: 56px; height: 56px; object-fit: cover;
-  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
-  box-shadow: 0 0 16px color-mix(in srgb, var(--mode-color) 35%, transparent);
+  width: 56px; height: 56px; object-fit: cover; border-radius: 12px;
+  display: block;
 }
 .game-body { flex: 1; min-width: 0; position: relative; z-index: 1; }
 .game-title { font-weight: 800; font-size: 18px; letter-spacing: 0.08em; }
@@ -252,25 +222,18 @@ button { font-family: inherit; color: inherit; }
   box-shadow: var(--glow);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
-.setup-bleed {
-  position: absolute; inset: -20% -10% -20% 40%;
-  background-size: cover; background-position: center;
-  opacity: 0.28; pointer-events: none;
-  mask-image: linear-gradient(90deg, transparent, #000 40%);
-  -webkit-mask-image: linear-gradient(90deg, transparent, #000 40%);
-}
 .setup-icon {
   width: 64px; height: 64px; flex-shrink: 0; position: relative; z-index: 1;
   display: flex; align-items: center; justify-content: center;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid color-mix(in srgb, var(--mode-color) 35%, transparent);
-  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
+  border: 1px solid color-mix(in srgb, var(--mode-color) 30%, transparent);
+  border-radius: 14px;
   color: var(--mode-color);
+  overflow: hidden;
 }
 .setup-icon.is-image { background: transparent; border: none; }
 .setup-icon.is-image img {
-  width: 64px; height: 64px; object-fit: cover;
-  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
+  width: 64px; height: 64px; object-fit: cover; border-radius: 14px; display: block;
 }
 .setup-copy { position: relative; z-index: 1; }
 .setup-title { font-size: 18px; font-weight: 800; letter-spacing: 0.1em; }
@@ -415,8 +378,7 @@ button { font-family: inherit; color: inherit; }
   display: flex; align-items: center; gap: 14px; margin-bottom: 24px; padding: 16px;
 }
 .settings-identity img {
-  width: 56px; height: 56px; object-fit: cover;
-  clip-path: polygon(14% 0, 100% 0, 86% 100%, 0 100%);
+  width: 56px; height: 56px; object-fit: cover; border-radius: 12px;
 }
 .chip-row { display: flex; gap: 8px; }
 .chip-row.wrap { flex-wrap: wrap; }

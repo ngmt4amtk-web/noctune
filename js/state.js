@@ -12,6 +12,7 @@ function defaultState() {
       a4: 442,
       noteStyle: 'doremi',
       volume: 0.8,
+      questionCount: 10,
     },
     records: {},
     played: {},

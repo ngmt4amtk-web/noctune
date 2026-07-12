@@ -3,9 +3,17 @@
 export const APP_TITLE = 'NOCTUNE';
 export const APP_TAG = 'EAR TRAINING';
 export const APP_ICON = 'assets/icons/noctune-icon-fork.png';
-export const APP_TAGLINE = '耳を研ぐ。夜に聴く。';
 
-/** @deprecated kept only so old imports fail loudly if misused */
+/** Allowed question counts in settings (shared). */
+export const QUESTION_COUNTS = [5, 10, 20];
+export const DEFAULT_QUESTION_COUNT = 10;
+
+export function resolveQuestionCount(settings = {}) {
+  const n = Number(settings.questionCount);
+  return QUESTION_COUNTS.includes(n) ? n : DEFAULT_QUESTION_COUNT;
+}
+
+/** @deprecated compatibility stubs */
 export const TITLES = [{ id: 'noctune', label: APP_TITLE, tag: APP_TAG }];
 export const ICONS = [{ id: 'fork', label: 'FORK', src: APP_ICON }];
 

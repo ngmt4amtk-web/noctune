@@ -1,5 +1,6 @@
 // 音当て: 単音を聴いて音名を当てる
 import { NOTE_NAMES_DOREMI, NOTE_NAMES_ABC } from '../theory.js';
+import { resolveQuestionCount } from '../identity.js';
 
 function pickDifferentMidi(pool, prevPc, rng) {
   if (pool.length <= 1) return pool[0];
@@ -22,8 +23,6 @@ const RANGES = {
   wide: midiRange(55, 76),
   '2oct': midiRange(60, 83),
 };
-
-const TOTAL = 10;
 
 export default {
   id: 'oto-ate',
@@ -54,14 +53,15 @@ export default {
     const style = opts.noteStyle || opts.settings?.noteStyle || 'doremi';
     const names = style === 'abc' ? NOTE_NAMES_ABC : NOTE_NAMES_DOREMI;
     const pool = RANGES[config.range] || RANGES.mid;
+    const total = resolveQuestionCount(opts.settings);
     let asked = 0;
     let correctCount = 0;
     let prevPc = null;
     return {
-      total: TOTAL,
+      total,
       next(prevCorrect) {
         if (prevCorrect) correctCount++;
-        if (asked >= TOTAL) return null;
+        if (asked >= total) return null;
         asked++;
         const targetMidi = pickDifferentMidi(pool, prevPc, rng);
         const pc = ((targetMidi % 12) + 12) % 12;
@@ -76,8 +76,8 @@ export default {
         };
       },
       summary() {
-        const accuracy = TOTAL ? correctCount / TOTAL : 0;
-        return { accuracy, detail: `${correctCount}/${TOTAL}問正解` };
+        const accuracy = total ? correctCount / total : 0;
+        return { accuracy, detail: `${correctCount}/${total}問正解` };
       },
     };
   },

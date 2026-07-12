@@ -19,6 +19,32 @@ test('全モードが画像アイコンを持つ', () => {
   }
 });
 
+test('設定の問題数が全モードに効く', () => {
+  for (const mode of MODES) {
+    const round5 = mode.createRound({}, makeRng(1), { settings: { questionCount: 5 } });
+    assert.equal(round5.total, 5);
+    const round20 = mode.createRound({}, makeRng(1), { settings: { questionCount: 20 } });
+    assert.equal(round20.total, 20);
+    const roundDef = mode.createRound({}, makeRng(1), { settings: {} });
+    assert.equal(roundDef.total, 10);
+  }
+});
+
+test('ハモリ odd問題数でも落ちない', () => {
+  const hamori = MODES.find((m) => m.id === 'hamori');
+  const round = hamori.createRound({ hibiki: 'P5', startCents: 25 }, makeRng(3), {
+    settings: { questionCount: 5 },
+  });
+  assert.equal(round.total, 5);
+  let q = round.next(null);
+  let n = 0;
+  while (q) {
+    n++;
+    q = round.next(true);
+  }
+  assert.equal(n, 5);
+});
+
 test('和音当てフリーはpitch-set・品質ラベルなし', () => {
   const round = chordAte.createRound({ gen: 'free', size: 2 }, makeRng(9), { noteStyle: 'doremi' });
   const q = round.next(null);

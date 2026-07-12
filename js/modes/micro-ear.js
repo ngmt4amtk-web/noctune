@@ -1,7 +1,7 @@
 // 音程比較: セント微差の2AFC弁別
 import { Staircase } from '../engine.js';
+import { resolveQuestionCount } from '../identity.js';
 
-const TOTAL = 14;
 const OPTIONS = ['高い', '低い'];
 const STARTS = { easy: 50, normal: 25, hard: 10, oni: 5 };
 
@@ -38,9 +38,10 @@ export default {
   },
   needsFingerboard: false,
 
-  createRound(config = {}, rng) {
+  createRound(config = {}, rng, opts = {}) {
     const start = STARTS[config.start] || STARTS.normal;
     const sc = new Staircase({ start, min: 1.5, max: 60, down: 0.7, up: 1.5 });
+    const total = resolveQuestionCount(opts.settings);
     let asked = 0;
     let correctCount = 0;
     const dirs = [];
@@ -55,13 +56,13 @@ export default {
     }
 
     return {
-      total: TOTAL,
+      total,
       next(prevCorrect) {
         if (prevCorrect !== null && prevCorrect !== undefined) {
           sc.report(prevCorrect);
           if (prevCorrect) correctCount++;
         }
-        if (asked >= TOTAL) return null;
+        if (asked >= total) return null;
         asked++;
 
         const cents = sc.current;

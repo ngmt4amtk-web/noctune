@@ -20,6 +20,7 @@ test('初期状態 v3・records空', async () => {
   assert.equal(s.version, 3);
   assert.deepEqual(s.records, {});
   assert.equal(s.settings.a4, 442);
+  assert.equal(s.settings.questionCount, 10);
   assert.equal(s.settings.titleId, undefined);
   assert.equal(s.streak, undefined);
 });
