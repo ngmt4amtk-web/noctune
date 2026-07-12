@@ -42,14 +42,23 @@ test('音当て: シャープ・フラットなしは白鍵のみ・7択', () =>
 test('音当て: フラットありは♭表記・♯なし', () => {
   const oto = MODES.find((m) => m.id === 'oto-ate');
   const round = oto.createRound({ accidental: 'flat', range: 'mid' }, makeRng(5), {
-    settings: { questionCount: 5, noteStyle: 'abc' },
+    settings: { questionCount: 10, noteStyle: 'abc' },
   });
-  const q = round.next(null);
-  assert.equal(q.input.options.length, 12);
-  const joined = q.input.options.join('');
-  assert.ok(joined.includes('♭'));
-  assert.equal(joined.includes('♯'), false);
-  assert.deepEqual(q.input.options.slice(0, 3), ['C', 'D♭', 'D']);
+  let q = round.next(null);
+  for (let i = 0; i < 10 && q; i++) {
+    assert.equal(q.input.options.length, 12);
+    const joined = q.input.options.join('');
+    assert.ok(joined.includes('♭'));
+    assert.equal(joined.includes('♯'), false);
+    assert.ok(q.input.correct >= 0 && q.input.correct < 12);
+    assert.equal(q.input.options[q.input.correct], q.explain.match(/「(.+)」/)[1]);
+    assert.equal(q.detail.targetPc, q.input.correct);
+    q = round.next(true);
+  }
+  const first = oto.createRound({ accidental: 'flat', range: 'mid' }, makeRng(5), {
+    settings: { questionCount: 1, noteStyle: 'abc' },
+  }).next(null);
+  assert.deepEqual(first.input.options.slice(0, 3), ['C', 'D♭', 'D']);
 });
 
 test('音当て: シャープありは既定どおり♯', () => {

@@ -29,6 +29,7 @@ export const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
  * @param {'none'|'sharp'|'flat'} accidental
  */
 export function noteNamesFor(style = 'doremi', accidental = 'sharp') {
+  // none は呼び出し側で白鍵に絞る。表記配列は sharp（白鍵は共通）
   if (accidental === 'flat') return style === 'abc' ? NOTE_NAMES_ABC_FLAT : NOTE_NAMES_DOREMI_FLAT;
   return style === 'abc' ? NOTE_NAMES_ABC : NOTE_NAMES_DOREMI;
 }
