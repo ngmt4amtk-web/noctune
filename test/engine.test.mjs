@@ -34,7 +34,7 @@ test('Staircase down/up と clamp', () => {
   sc.report(true);
   assert.ok(sc.current < 20);
   sc.report(false);
-  assert.ok(sc.current > sc.best || sc.best === null || true);
+  assert.ok(sc.current > 2);
 });
 
 test('Staircase best と reversals', () => {

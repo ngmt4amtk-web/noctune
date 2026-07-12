@@ -22,7 +22,7 @@ export function applyIdentity() {
   const metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
   if (metaTitle) metaTitle.setAttribute('content', APP_TITLE);
   const fav = document.querySelector('link[rel="icon"]');
-  if (fav) fav.href = 'assets/icons/favicon.png';
+  if (fav) fav.href = APP_ICON;
   const apple = document.querySelector('link[rel="apple-touch-icon"]');
-  if (apple) apple.href = 'assets/icons/app-icon.png';
+  if (apple) apple.href = APP_ICON;
 }
