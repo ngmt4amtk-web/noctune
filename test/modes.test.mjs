@@ -19,7 +19,7 @@ test('全モードが画像アイコンを持つ', () => {
   }
 });
 
-test('音当て: シャープ・フラットなしは白鍵のみ・7択', () => {
+test('音当て: 記号なしは白鍵のみ・7択', () => {
   const oto = MODES.find((m) => m.id === 'oto-ate');
   const WHITE = [0, 2, 4, 5, 7, 9, 11];
   const round = oto.createRound({ accidental: 'none', range: 'mid' }, makeRng(4), {
