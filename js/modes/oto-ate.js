@@ -1,6 +1,6 @@
 // 音当て: 単音を聴いて音名を当てる
-import { noteNamesFor, WHITE_PCS } from '../theory.js?v=0713a2';
-import { resolveQuestionCount } from '../identity.js?v=0713a2';
+import { noteNamesFor, WHITE_PCS } from '../theory.js?v=0713a3';
+import { resolveQuestionCount } from '../identity.js?v=0713a3';
 
 function pickDifferentMidi(pool, prevPc, rng) {
   if (pool.length <= 1) return pool[0];

@@ -242,14 +242,21 @@ export class Synth {
     if (this.master) this.master.gain.value = this._volume ?? 0.9;
   }
 
-  // 刺激＋SFXを即フェード。古いawaitも世代で切る。
-  stopAll() {
+  // 刺激音だけ止める（UIのピッ＝select は残す）
+  stopVoices() {
     this._gen += 1;
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     for (const v of Array.from(this._voices)) {
       v.release(now, true);
     }
+  }
+
+  // 刺激＋SFXを即フェード。古いawaitも世代で切る。
+  stopAll() {
+    this.stopVoices();
+    if (!this.ctx) return;
+    const now = this.ctx.currentTime;
     for (const n of Array.from(this._fxNodes)) {
       try {
         n.stop(now);

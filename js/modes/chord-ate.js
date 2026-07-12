@@ -1,6 +1,6 @@
 // 和音当て: 構成音の音名当て。出題は和声的（コード）／フリー選択可
-import { NOTE_NAMES_DOREMI, NOTE_NAMES_ABC } from '../theory.js?v=0713a2';
-import { resolveQuestionCount } from '../identity.js?v=0713a2';
+import { NOTE_NAMES_DOREMI, NOTE_NAMES_ABC } from '../theory.js?v=0713a3';
+import { resolveQuestionCount } from '../identity.js?v=0713a3';
 
 const MIDI_MIN = 48;
 const MIDI_MAX = 71;

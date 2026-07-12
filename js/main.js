@@ -29,7 +29,7 @@ async function startPlay(params = {}) {
   state.lastConfig[mode.id] = { ...config };
   saveState(state);
 
-  synth.stopAll();
+  synth.stopVoices();
   const running = synth.ensureRunning();
   origShow('play', { modeId: mode.id, config });
   const container = document.getElementById('round-root');
@@ -74,7 +74,8 @@ nav.show = (id, params = {}) => {
     startPlay(params);
     return;
   }
-  synth.stopAll();
+  // 画面遷移では刺激音だけ止める。select のピッを殺さない
+  synth.stopVoices();
   origShow(id, params);
 };
 
