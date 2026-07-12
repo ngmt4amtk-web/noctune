@@ -12,10 +12,10 @@ function fmtCents(c) {
 
 export default {
   id: 'micro-ear',
-  title: 'ミクロ耳',
+  title: '音程比較',
   subtitle: 'ちいさなズレを聴き分けろ',
-  icon: '△',
-  color: '#1a8fff',
+  icon: '↕',
+  color: '#4d8dff',
   setup: [
     {
       key: 'start',

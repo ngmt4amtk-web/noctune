@@ -1,12 +1,11 @@
-// 進捗・ランク・ストリーク管理 v2（レベル/星制を廃止しベスト記録制へ。docs/V2.md）
-// import は js/engine.js の xpToRank のみ。DOM禁止・localStorageのみ。
+// 進捗管理 v3: XP/ランク廃止。ベスト記録・ストリーク・バッジ。
 
-import { xpToRank } from './engine.js';
+const STORAGE_KEY = 'noctune-v1';
+const STATE_VERSION = 3;
 
-const STORAGE_KEY = 'noctune-v1'; // みみクエストと分離
-const STATE_VERSION = 2;
-
-const MODE_IDS = ['oto-ate', 'micro-ear', 'hamori'];
+const MODE_IDS = ['oto-ate', 'chord-ate', 'micro-ear', 'hamori'];
+// 「三つの扉」は元コア3モードのまま（和音当て追加で意味を崩さない）
+const CORE_MODE_IDS = ['oto-ate', 'micro-ear', 'hamori'];
 
 const BADGE_DEFS = [
   { id: 'hajime', name: 'はじめの一歩', icon: '👣' },
@@ -17,6 +16,7 @@ const BADGE_DEFS = [
   { id: 'micro-no-mimi', name: 'ミクロの耳', icon: '🔬' },
   { id: 'cho-micro-no-mimi', name: '超ミクロの耳', icon: '🔭' },
   { id: 'kirei-no-mimi', name: 'きれいの耳', icon: '💎' },
+  { id: 'chord-hajime', name: '和音のはじまり', icon: '♫' },
 ];
 const BADGE_IDS = BADGE_DEFS.map((b) => b.id);
 
@@ -31,10 +31,9 @@ function defaultState() {
       a4: 442,
       noteStyle: 'doremi',
       volume: 0.8,
-      titleId: 'noctune',
-      iconId: 'slash',
+      titleId: 'otomusubi',
+      iconId: 'warm',
     },
-    xp: 0,
     records: {},
     played: {},
     lastConfig: {},
@@ -45,7 +44,6 @@ function defaultState() {
   };
 }
 
-// 壊れたJSON・旧バージョンからでも初期値で補って復帰する
 export function loadState() {
   let raw = null;
   try {
@@ -72,7 +70,6 @@ export function loadState() {
   return {
     version: STATE_VERSION,
     settings: { ...base.settings, ...(raw.settings || {}) },
-    xp: Number.isFinite(raw.xp) ? raw.xp : 0,
     records,
     played,
     lastConfig: raw.lastConfig && typeof raw.lastConfig === 'object' ? { ...raw.lastConfig } : {},
@@ -80,7 +77,6 @@ export function loadState() {
       last: typeof raw.streak?.last === 'string' ? raw.streak.last : null,
       count: Number.isFinite(raw.streak?.count) ? raw.streak.count : 0,
     },
-    // v1のバッジはv2に現存するIDだけ引き継ぐ（星・レベル系は自然消滅）
     badges: Array.isArray(raw.badges) ? raw.badges.filter((b) => BADGE_IDS.includes(b)) : [],
     tipCursor: Number.isFinite(raw.tipCursor) ? raw.tipCursor : 0,
     tipDate: typeof raw.tipDate === 'string' ? raw.tipDate : null,
@@ -91,7 +87,6 @@ export function saveState(s) {
   globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
 }
 
-// configの安定キー化（キー順に依存しない）
 export function configKeyOf(config) {
   const c = config || {};
   return Object.keys(c).sort().map((k) => `${k}=${c[k]}`).join('&') || 'default';
@@ -108,7 +103,6 @@ function yesterdayStr(today) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// モードの全configにまたがるベスト（better='low'なら最小、'high'なら最大）
 export function bestOf(state, modeId, better = 'low') {
   const r = state.records[modeId];
   if (!r) return null;
@@ -117,15 +111,12 @@ export function bestOf(state, modeId, better = 'low') {
   return better === 'low' ? Math.min(...vals) : Math.max(...vals);
 }
 
-// 結果記録 v2。XP・ストリーク・ベスト記録・バッジをまとめて更新し差分を返す
-// opts: { score, streakMax, record: {value, display}|null, better: 'high'|'low' }
+// opts: { streakMax, record, better } ※scoreはラウンド表示用のみ・永続化しない
 export function recordResult(state, modeId, configKey, opts = {}) {
-  const { score = 0, streakMax, record = null, better = 'low' } = opts;
+  const { streakMax, record = null, better = 'low' } = opts;
 
-  // プレイ回数
   state.played[modeId] = (state.played[modeId] || 0) + 1;
 
-  // ベスト記録
   let recordOut = null;
   if (record && Number.isFinite(record.value)) {
     if (!state.records[modeId]) state.records[modeId] = {};
@@ -135,12 +126,6 @@ export function recordResult(state, modeId, configKey, opts = {}) {
     recordOut = { ...record, improved, best: state.records[modeId][configKey] };
   }
 
-  // XP・ランク
-  const rankBefore = xpToRank(state.xp);
-  state.xp += score;
-  const rankAfter = xpToRank(state.xp);
-
-  // ストリーク
   const today = todayStr();
   if (state.streak.last !== today) {
     state.streak.count = state.streak.last === yesterdayStr(today) ? state.streak.count + 1 : 1;
@@ -148,7 +133,6 @@ export function recordResult(state, modeId, configKey, opts = {}) {
   }
   const streak = state.streak.count;
 
-  // バッジ
   const newBadges = [];
   const award = (id) => {
     if (!state.badges.includes(id)) {
@@ -159,26 +143,26 @@ export function recordResult(state, modeId, configKey, opts = {}) {
   award('hajime');
   if (streak >= 3) award('mainichi-no-mimi');
   if (streak >= 7) award('isshuukan-no-mimi');
-  if (MODE_IDS.every((id) => (state.played[id] || 0) > 0)) award('mittsu-no-tobira');
+  if (CORE_MODE_IDS.every((id) => (state.played[id] || 0) > 0)) award('mittsu-no-tobira');
   if (Number.isFinite(streakMax) && streakMax >= 10) award('combo-no-tatsujin');
   const microBest = bestOf(state, 'micro-ear', 'low');
   if (microBest !== null && microBest <= 10) award('micro-no-mimi');
   if (microBest !== null && microBest <= 3) award('cho-micro-no-mimi');
   const hamoriBest = bestOf(state, 'hamori', 'low');
   if (hamoriBest !== null && hamoriBest <= 5) award('kirei-no-mimi');
+  if ((state.played['chord-ate'] || 0) > 0) award('chord-hajime');
 
   saveState(state);
 
-  return { xpGained: score, rankBefore, rankAfter, streak, newBadges, record: recordOut };
+  return { streak, newBadges, record: recordOut };
 }
 
-// きょうの一言の巡回インデックス。日付が変わったら+1、同日内は同じ値を返す
 export function tipIndexForToday(state) {
   const today = todayStr();
   if (state.tipDate !== today) {
     state.tipDate = today;
     state.tipCursor = (state.tipCursor || 0) + 1;
-    saveState(state); // ラウンド未実施の日でもカーソル前進を永続化する
+    saveState(state);
   }
   return state.tipCursor;
 }

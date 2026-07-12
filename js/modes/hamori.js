@@ -31,8 +31,8 @@ export default {
   id: 'hamori',
   title: 'ハモリ判定',
   subtitle: 'きれい？キモい？',
-  icon: '◇',
-  color: '#3de7ff',
+  icon: '♩',
+  color: '#7b6cff',
   setup: [
     {
       key: 'hibiki',

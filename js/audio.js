@@ -1,31 +1,30 @@
-// バイオリン音源エンジン（Web Audio・発音専用・マイク不使用）
-// 契約: docs/CONTRACTS.md「js/audio.js」節 / I-03
+// 音源エンジン（Web Audio）。刺激音とSFXを分離管理し、stopAllで即黙る。
 
-const ATTACK = 0.025; // 立ち上がり 25ms
-const RELEASE = 0.18; // リリース 180ms
-const DECAY_TO = 0.8; // アタック後、この比率まで軽く減衰
-const DECAY_TIME = 0.35; // 減衰にかける秒数
-// 加算合成の部分音（sine）: 基音1.0 / 2倍0.35 / 3倍0.12 / 4倍0.05
+const ATTACK = 0.025;
+const RELEASE = 0.18;
+const DECAY_TO = 0.8;
+const DECAY_TIME = 0.35;
 const PARTIALS = [1.0, 0.35, 0.12, 0.05];
-const PARTIAL_NORM = 0.6; // 合算のヘッドルーム確保（クリップ防止）
+const PARTIAL_NORM = 0.6;
+const STOP_RELEASE = 0.045; // stopAll時の短いフェード
 
 export class Synth {
   constructor() {
-    // AudioContextは遅延生成（iOS対策）
     this.ctx = null;
     this.master = null;
     this.comp = null;
-    this._voices = new Set(); // 進行中の声部（{gain, oscs, stop}）
+    this._voices = new Set();
+    this._fxNodes = new Set(); // SFX用（stopAll対象）
+    this._gen = 0; // 再生世代。stopAllで加算し古いawaitを切る
     this._unlocked = false;
-    this._volume = null; // setVolumeで設定。未設定はmaster既定(0.9)
+    this._volume = null;
   }
 
-  // 初回タップから呼ぶ想定。resume + iOS無音アンロック
   async ensureRunning() {
     if (!this.ctx) this._build();
     try {
       if (this.ctx.state !== 'running') await this.ctx.resume();
-    } catch (_) { /* 連打時の例外を無視 */ }
+    } catch (_) {}
     if (!this._unlocked) this._silentUnlock();
     return this.ctx;
   }
@@ -33,13 +32,11 @@ export class Synth {
   _build() {
     const AC = window.AudioContext || window.webkitAudioContext;
     this.ctx = new AC();
-    // マスター: DynamicsCompressor（重音のクリップ防止）→ destination
     this.comp = this.ctx.createDynamicsCompressor();
     this.master = this.ctx.createGain();
     this.master.gain.value = this._volume != null ? this._volume : 0.9;
     this.master.connect(this.comp);
     this.comp.connect(this.ctx.destination);
-    // interrupted→復帰時に自動resume（iOS Safari）
     this.ctx.addEventListener?.('statechange', () => {
       if (this.ctx.state === 'interrupted' || this.ctx.state === 'suspended') {
         this.ctx.resume().catch(() => {});
@@ -47,7 +44,6 @@ export class Synth {
     });
   }
 
-  // iOS無音バッファ再生でアンロック
   _silentUnlock() {
     try {
       const buf = this.ctx.createBuffer(1, 1, this.ctx.sampleRate);
@@ -56,29 +52,21 @@ export class Synth {
       src.connect(this.ctx.destination);
       src.start(0);
       this._unlocked = true;
-    } catch (_) { /* 失敗しても継続 */ }
+    } catch (_) {}
   }
 
-  // 1声部を構築。startTimeで発音、返り値でリリース制御
-  // 加算合成: 部分音sineを4本、固定振幅比で混ぜ→ローパスで丸め→包絡ゲイン。
-  // 全声部が同一の部分音構成なので、純正重音なら各倍音同士も同時にうなりゼロ、
-  // ズレると倍音間でうなりが聴こえる（チューナー基準音のような澄んだ音）。
-  // 第5引数は旧chorus互換の受け口（加算合成では未使用・両声部同構成を保証）。
-  _makeVoice(freq, vol, vibrato, t0, _legacy = true) {
+  _makeVoice(freq, vol, vibrato, t0) {
     const ctx = this.ctx;
     const voiceGain = ctx.createGain();
     voiceGain.gain.value = 0;
 
-    // わずかなローパス(≈3kHz)で高次のギラつきを抑える
     const lp = ctx.createBiquadFilter();
     lp.type = 'lowpass';
     lp.frequency.value = 3000;
     lp.Q.value = 0.5;
-
     lp.connect(voiceGain);
     voiceGain.connect(this.master);
 
-    // 部分音sine 4本（基音の整数倍）。各々を固定振幅比でローパスへ混ぜる
     const oscs = PARTIALS.map((amp, i) => {
       const o = ctx.createOscillator();
       o.type = 'sine';
@@ -90,19 +78,18 @@ export class Synth {
       return o;
     });
 
-    // ビブラート（vibrato=true時のみ 5.5Hz・±12cents）。全部分音へ比例適用
-    let lfo = null, lfoGain = null;
+    let lfo = null;
+    let lfoGain = null;
     if (vibrato) {
       lfo = ctx.createOscillator();
       lfo.frequency.value = 5.5;
       lfoGain = ctx.createGain();
-      lfoGain.gain.value = 12; // detuneはcent単位
+      lfoGain.gain.value = 12;
       lfo.connect(lfoGain);
       oscs.forEach((o) => lfoGain.connect(o.detune));
       lfo.start(t0);
     }
 
-    // 包絡: attack 25ms で vol → 0.35s かけて 0.8*vol へ軽く減衰 → サスティン
     const g = voiceGain.gain;
     g.setValueAtTime(0, t0);
     g.linearRampToValueAtTime(vol, t0 + ATTACK);
@@ -111,23 +98,18 @@ export class Synth {
     oscs.forEach((o) => o.start(t0));
 
     const voice = { voiceGain, oscs, lfo, released: false };
-    // リリース関数
-    voice.release = (when) => {
+    voice.release = (when, quick = false) => {
       if (voice.released) return;
       voice.released = true;
       const rt = Math.max(when, ctx.currentTime);
+      const rel = quick ? STOP_RELEASE : RELEASE;
       try {
         g.cancelScheduledValues(rt);
-        // rt時点の値を確定させる（未来rtでg.value=0を読むとクリック＋RELEASE無効化）。
-        // cancelAndHoldでランプ途中も正しく保持。非対応環境はサスティンvolで代替。
-        if (typeof g.cancelAndHoldAtTime === 'function') {
-          g.cancelAndHoldAtTime(rt);
-        } else {
-          g.setValueAtTime(vol * DECAY_TO, rt); // 非対応環境: サスティン値で保持
-        }
-        g.setTargetAtTime(0, rt, RELEASE / 3);
+        if (typeof g.cancelAndHoldAtTime === 'function') g.cancelAndHoldAtTime(rt);
+        else g.setValueAtTime(vol * DECAY_TO, rt);
+        g.setTargetAtTime(0, rt, rel / 3);
       } catch (_) {}
-      const stopAt = rt + RELEASE + 0.05;
+      const stopAt = rt + rel + 0.05;
       oscs.forEach((o) => { try { o.stop(stopAt); } catch (_) {} });
       if (lfo) { try { lfo.stop(stopAt); } catch (_) {} }
       const cleanup = () => this._voices.delete(voice);
@@ -139,134 +121,143 @@ export class Synth {
     return voice;
   }
 
-  // 単音。resolveは発音終了時
+  // 世代が変わったら即resolve（stopAll後の古いawaitを切る）
+  _waitGen(ms, gen) {
+    return new Promise((res) => {
+      const end = performance.now() + Math.max(0, ms);
+      const tick = () => {
+        if (this._gen !== gen) return res();
+        if (performance.now() >= end) return res();
+        setTimeout(tick, 16);
+      };
+      tick();
+    });
+  }
+
   async playNote({ freq, dur = 1.0, vol = 0.8, vibrato = false }) {
     await this.ensureRunning();
+    const gen = this._gen;
     const t0 = this.ctx.currentTime + 0.01;
     const voice = this._makeVoice(freq, vol, vibrato, t0);
     const relAt = t0 + Math.max(dur, ATTACK);
     voice.release(relAt);
     const totalMs = (relAt + RELEASE - this.ctx.currentTime) * 1000;
-    return this._wait(totalMs);
+    return this._waitGen(totalMs, gen);
   }
 
-  // 順次再生。gapは音間の無音秒
   async playSequence(notes, { vol = 0.8 } = {}) {
     await this.ensureRunning();
+    const gen = this._gen;
     for (const n of notes) {
+      if (this._gen !== gen) return;
       await this.playNote({ freq: n.freq, dur: n.dur ?? 0.6, vol });
-      if (n.gap) await this._wait(n.gap * 1000);
+      if (n.gap && this._gen === gen) await this._waitGen(n.gap * 1000, gen);
     }
   }
 
-  // 重音（2声同時）。うなりが明瞭に聴こえること（最重要）
-  // 両声部とも同一の加算合成構成: 純正時は各倍音同士も同時にうなりゼロ、
-  // ズレ時だけ倍音間でうなる。刺激純度を守る
   async playDoubleStop({ f1, f2, dur = 2.0, vol = 0.7 }) {
-    await this.ensureRunning();
-    const t0 = this.ctx.currentTime + 0.01;
-    const v = Math.min(1, vol); // 加算合成は基音が強いので追加ブースト不要
-    const v1 = this._makeVoice(f1, v, false, t0);
-    const v2 = this._makeVoice(f2, v, false, t0);
-    const relAt = t0 + Math.max(dur, ATTACK);
-    v1.release(relAt);
-    v2.release(relAt);
-    const totalMs = (relAt + RELEASE - this.ctx.currentTime) * 1000;
-    return this._wait(totalMs);
+    return this.playChord({ freqs: [f1, f2], dur, vol });
   }
 
-  // 短い効果音（await不要）。耳トレ刺激と帯域が被らない短いUIスナップ中心
+  // 2〜3声同時。同一t0で開始。
+  async playChord({ freqs, dur = 1.6, vol = 0.55, vibrato = false }) {
+    await this.ensureRunning();
+    if (!Array.isArray(freqs) || (freqs.length !== 2 && freqs.length !== 3)) {
+      throw new TypeError('playChord: freqs must be length 2 or 3');
+    }
+    if (freqs.some((f) => !Number.isFinite(f) || f <= 0)) {
+      throw new TypeError('playChord: freqs must be positive finite numbers');
+    }
+    const gen = this._gen;
+    const t0 = this.ctx.currentTime + 0.01;
+    const voiceVol = Math.min(1, vol);
+    const voices = freqs.map((f) => this._makeVoice(f, voiceVol, vibrato, t0));
+    const relAt = t0 + Math.max(dur, ATTACK);
+    voices.forEach((v) => v.release(relAt));
+    const totalMs = (relAt + RELEASE - this.ctx.currentTime) * 1000;
+    return this._waitGen(totalMs, gen);
+  }
+
+  _trackFx(node) {
+    this._fxNodes.add(node);
+    const clear = () => this._fxNodes.delete(node);
+    try {
+      node.onended = clear;
+    } catch (_) {}
+    setTimeout(clear, 1200);
+  }
+
+  // 子ども快感系SFX。刺激音停止後に呼ぶ前提。≦350ms。
   playFx(name) {
-    if (!this.ctx) { this.ensureRunning(); }
+    if (!this.ctx) this.ensureRunning();
     if (!this.ctx) return;
     if (this.ctx.state !== 'running') this.ctx.resume().catch(() => {});
     const ctx = this.ctx;
     const now = ctx.currentTime + 0.005;
     const dest = this.master || ctx.destination;
 
-    // ノイズバースト（音程感なし）
-    const noise = (start, len, peak = 0.22, hp = 1800) => {
-      const n = Math.max(1, Math.floor(ctx.sampleRate * len));
-      const buf = ctx.createBuffer(1, n, ctx.sampleRate);
-      const data = buf.getChannelData(0);
-      for (let i = 0; i < n; i++) data[i] = Math.random() * 2 - 1;
-      const src = ctx.createBufferSource();
-      src.buffer = buf;
-      const f = ctx.createBiquadFilter();
-      f.type = 'highpass';
-      f.frequency.value = hp;
-      const g = ctx.createGain();
-      g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(peak, start + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.0001, start + len);
-      src.connect(f);
-      f.connect(g);
-      g.connect(dest);
-      src.start(start);
-      src.stop(start + len + 0.02);
-    };
-
-    const click = (freq, start, len, peak = 0.18) => {
+    const tone = (freq, start, len, peak = 0.22, type = 'sine') => {
       const o = ctx.createOscillator();
       const g = ctx.createGain();
-      o.type = 'sine';
+      o.type = type;
       o.frequency.value = freq;
       o.connect(g);
       g.connect(dest);
       g.gain.setValueAtTime(0, start);
-      g.gain.linearRampToValueAtTime(peak, start + 0.003);
+      g.gain.linearRampToValueAtTime(peak, start + 0.012);
       g.gain.exponentialRampToValueAtTime(0.0001, start + len);
       o.start(start);
-      o.stop(start + len + 0.02);
+      o.stop(start + len + 0.03);
+      this._trackFx(o);
     };
 
     switch (name) {
-      case 'correct': // ~120ms 高域シュッ＋短いスナップ（音程メロディなし）
-        noise(now, 0.07, 0.2, 2200);
-        click(2400, now + 0.02, 0.05, 0.12);
+      case 'correct': // ピロン♪ 明るい2音（~280ms）
+        tone(1046.5, now, 0.12, 0.26, 'triangle'); // C6
+        tone(1568.0, now + 0.09, 0.16, 0.22, 'triangle'); // G6
         break;
-      case 'wrong': // ~140ms 低めキャンセル（罰ブザーにしない）
-        noise(now, 0.09, 0.14, 400);
-        click(220, now, 0.11, 0.1);
+      case 'wrong': // ポヨン 柔らかい下向き（~220ms）
+        tone(392, now, 0.1, 0.16, 'sine'); // G4
+        tone(293.7, now + 0.08, 0.12, 0.12, 'sine'); // D4
         break;
       case 'fanfare':
-      case 'newBest': // 短い上昇ノイズ＋白線的クリック（アルペジオ禁止）
-        noise(now, 0.06, 0.16, 1600);
-        click(1800, now + 0.05, 0.05, 0.1);
-        noise(now + 0.08, 0.07, 0.18, 2400);
-        click(2800, now + 0.1, 0.06, 0.1);
+      case 'newBest': // キラキラ小祝（~320ms）
+        tone(784, now, 0.1, 0.2, 'triangle');
+        tone(988, now + 0.08, 0.1, 0.2, 'triangle');
+        tone(1318.5, now + 0.16, 0.14, 0.18, 'triangle');
         break;
       case 'select':
       case 'tap':
-        click(1600, now, 0.018, 0.12);
+        tone(880, now, 0.04, 0.12, 'sine');
         break;
       default:
         break;
     }
   }
 
-  // マスター音量(0..1)を設定。ctx未生成でも記憶し_build時に反映（I-12統合の許可改修）
   setVolume(v) {
     const vol = Math.max(0, Math.min(1, Number(v)));
     this._volume = Number.isFinite(vol) ? vol : this._volume;
     if (this.master) this.master.gain.value = this._volume ?? 0.9;
   }
 
-  // 進行中の全声部をリリース付きで即時停止
+  // 刺激＋SFXを即フェード。古いawaitも世代で切る。
   stopAll() {
+    this._gen += 1;
     if (!this.ctx) return;
     const now = this.ctx.currentTime;
     for (const v of Array.from(this._voices)) {
-      v.release(now);
+      v.release(now, true);
     }
-  }
-
-  _wait(ms) {
-    return new Promise((res) => setTimeout(res, Math.max(0, ms)));
+    for (const n of Array.from(this._fxNodes)) {
+      try {
+        n.stop(now);
+      } catch (_) {}
+      this._fxNodes.delete(n);
+    }
   }
 }
 
-// documentに一度だけ登録。初回ジェスチャで resume + 無音再生
 export function unlockOnFirstGesture(synth) {
   const handler = () => {
     synth.ensureRunning();

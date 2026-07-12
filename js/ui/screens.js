@@ -1,7 +1,5 @@
-// 画面遷移。#app 直下を差し替え。
-// nav.init(deps) → nav.show('home'|'setup'|'play'|'result'|'settings', params)
-
-import { bigButton, gameCard, rankCard, tipCard, el } from './components.js';
+// 画面遷移
+import { bigButton, gameCard, streakBar, tipCard, el } from './components.js';
 import { confetti, starBurst } from './fx.js';
 import { TITLES, ICONS, resolveTitle, resolveIcon } from '../identity.js';
 
@@ -15,26 +13,13 @@ function mount(node) {
   app().replaceChildren(node);
 }
 
-function fallbackRank(xp) {
-  return { name: 'SIGNAL 0', icon: '◦', level: 1, nextAt: 300, xp, prevAt: 0 };
-}
-
-function rankInfo() {
-  const xp = deps.state.xp || 0;
-  if (typeof deps.computeRank === 'function') {
-    const r = deps.computeRank(xp);
-    return { ...r, xp, prevAt: r.prevAt ?? 0 };
-  }
-  return fallbackRank(xp);
-}
-
 function todaysTip() {
   const list = deps.tips;
   if (Array.isArray(list) && list.length > 0) {
     const idx = (deps.state.tipCursor || 0) % list.length;
     return list[idx];
   }
-  return '毎日ちょっとずつ、耳は育つ。今日も1ラウンド。';
+  return 'ちょっと聴いて、当てる。それだけで耳は育つ。';
 }
 
 function brand() {
@@ -102,16 +87,6 @@ function configLabel(mode, config) {
 }
 
 function renderHome() {
-  const info = rankInfo();
-  const hero = rankCard({
-    name: info.name,
-    icon: info.icon,
-    xp: info.xp,
-    prevAt: info.prevAt,
-    nextAt: info.nextAt,
-    streak: deps.state.streak?.count || 0,
-  });
-
   const list = el('div', { class: 'game-list' });
   for (const mode of deps.modes) {
     list.appendChild(gameCard(mode, { best: bestFor(mode) }, () => nav.show('setup', { modeId: mode.id })));
@@ -122,7 +97,14 @@ function renderHome() {
     el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('settings') }, '⚙'),
   ]);
 
-  mount(el('div', { class: 'screen home' }, [top, hero, list, tipCard(todaysTip())]));
+  mount(
+    el('div', { class: 'screen home' }, [
+      top,
+      streakBar(deps.state.streak?.count || 0),
+      list,
+      tipCard(todaysTip()),
+    ])
+  );
 }
 
 function renderSetup(params = {}) {
@@ -170,10 +152,14 @@ function renderSetup(params = {}) {
   if (hints.length) children.push(el('div', { class: 'setup-hint' }, hints.join(' ')));
   children.push(blocks);
   children.push(
-    el('div', { class: 'setup-start' }, bigButton('START', () => {
-      rememberConfig(modeId, config);
-      nav.show('play', { modeId, config });
-    }, { variant: 'primary' }))
+    el(
+      'div',
+      { class: 'setup-start' },
+      bigButton('はじめる', () => {
+        rememberConfig(modeId, config);
+        nav.show('play', { modeId, config });
+      }, { variant: 'primary' })
+    )
   );
 
   mount(el('div', { class: 'screen setup', style: { '--mode-color': mode.color || 'var(--accent)' } }, children));
@@ -202,7 +188,7 @@ function renderPlay(params = {}) {
     ]),
   ]);
 
-  const roundRoot = el('div', { id: 'round-root' }, el('div', { class: 'round-placeholder' }, 'LOADING…'));
+  const roundRoot = el('div', { id: 'round-root' }, el('div', { class: 'round-placeholder' }, 'じゅんび中…'));
   mount(el('div', { class: 'screen play', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [header, roundRoot]));
 }
 
@@ -219,8 +205,6 @@ function renderResult(params = {}) {
     config,
     accuracy = 0,
     score = 0,
-    xpGained = 0,
-    rankAfter,
     newBadges = [],
     summary,
     record = null,
@@ -237,37 +221,23 @@ function renderResult(params = {}) {
 
   const burstZone = el('div', { class: 'result-burst-zone' });
   const heroChildren = [burstZone];
-  if (newBest) heroChildren.push(el('div', { class: 'best-badge' }, 'NEW BEST'));
+  if (newBest) heroChildren.push(el('div', { class: 'best-badge' }, 'じこベスト！'));
   if (recordDisplay) {
     heroChildren.push(el('div', { class: 'record-value' }, recordDisplay));
-    heroChildren.push(el('div', { class: 'record-label' }, 'record'));
+    heroChildren.push(el('div', { class: 'record-label' }, 'きろく'));
   }
-  heroChildren.push(el('div', { class: 'result-title' }, mode ? `${mode.icon} ${mode.title}` : 'CLEAR'));
+  heroChildren.push(el('div', { class: 'result-title' }, mode ? `${mode.icon} ${mode.title}` : 'おつかれ！'));
   const hero = el('div', { class: 'result-hero card', style: { '--mode-color': mode?.color || 'var(--accent)' } }, heroChildren);
 
   const stats = el('div', { class: 'result-stats' }, [
-    statBox(`${Math.round(accuracy * 100)}%`, 'accuracy'),
-    statBox(String(score), 'score'),
-    statBox(`+${xpGained}`, 'xp'),
+    statBox(`${Math.round(accuracy * 100)}%`, 'せいかい'),
+    statBox(String(score), 'ポイント'),
   ]);
 
-  const children = [hero, stats];
+  const children = [hero, stats, streakBar(deps.state.streak?.count || 0)];
 
   if (summary?.detail) {
     children.push(el('div', { class: 'card detail-card' }, summary.detail));
-  }
-
-  if (rankAfter) {
-    children.push(
-      rankCard({
-        name: rankAfter.name,
-        icon: rankAfter.icon,
-        xp: deps.state.xp || 0,
-        prevAt: rankAfter.prevAt ?? 0,
-        nextAt: rankAfter.nextAt,
-        streak: deps.state.streak?.count || 0,
-      })
-    );
   }
 
   if (newBadges.length > 0) {
@@ -280,9 +250,9 @@ function renderResult(params = {}) {
 
   children.push(
     el('div', { class: 'result-actions' }, [
-      bigButton('もう一回', () => nav.show('play', { modeId, config }), { variant: 'primary' }),
+      bigButton('もういっかい', () => nav.show('play', { modeId, config }), { variant: 'primary' }),
       el('div', { class: 'btn-row' }, [
-        bigButton('せってい変え', () => nav.show('setup', { modeId }), { variant: 'ghost' }),
+        bigButton('せってい', () => nav.show('setup', { modeId }), { variant: 'ghost' }),
         bigButton('ホーム', () => nav.show('home'), { variant: 'ghost' }),
       ]),
     ])
@@ -300,11 +270,17 @@ function renderResult(params = {}) {
 }
 
 function renderSettings() {
-  const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8, titleId: 'noctune', iconId: 'slash' };
+  const s = deps.state.settings || {
+    a4: 442,
+    noteStyle: 'doremi',
+    volume: 0.8,
+    titleId: 'otomusubi',
+    iconId: 'slash',
+  };
 
   const top = el('div', { class: 'top-row' }, [
     el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
-    el('div', { class: 'screen-title' }, 'Settings'),
+    el('div', { class: 'screen-title' }, 'せってい'),
     el('div', { style: { width: '44px' } }),
   ]);
 
@@ -332,9 +308,9 @@ function renderSettings() {
   }
 
   const titleBlock = chipRow(
-    'アプリタイトル',
+    'アプリ名',
     TITLES.map((t) => ({ label: t.label, value: t.id })),
-    s.titleId || 'noctune',
+    s.titleId || 'otomusubi',
     (v) => {
       s.titleId = v;
       deps.onSettingsChange?.({ titleId: v });
@@ -362,7 +338,7 @@ function renderSettings() {
     );
   }
   const iconBlock = el('div', { class: 'settings-block' }, [
-    el('div', { class: 'settings-label' }, 'アプリアイコン'),
+    el('div', { class: 'settings-label' }, 'アイコン'),
     iconGrid,
   ]);
 
@@ -381,7 +357,7 @@ function renderSettings() {
   );
 
   const noteStyleBlock = chipRow(
-    '音名表記',
+    '音名',
     [
       { label: 'ドレミ', value: 'doremi' },
       { label: 'ABC', value: 'abc' },
@@ -404,14 +380,14 @@ function renderSettings() {
       deps.onSettingsChange?.({ volume: s.volume });
     },
   });
-  const volumeBlock = el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, '音量'), volumeInput]);
+  const volumeBlock = el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, 'おんりょう'), volumeInput]);
 
   const about = el('div', { class: 'settings-block' }, [
-    el('div', { class: 'settings-label' }, 'About'),
+    el('div', { class: 'settings-label' }, 'このアプリ'),
     el(
       'p',
       { class: 'about-text' },
-      'NOCTUNE は聴くだけで耳を鍛える短時間トレ。おとあて／ミクロ耳／ハモリ判定の3モード。マイク不要。みみクエストの別アプリ版。'
+      'おとむすびは、聴いて当てるだけの耳トレ。音当て・和音当て・音程比較・ハモリ判定。マイク不要。みみクエストの別アプリ。'
     ),
   ]);
 

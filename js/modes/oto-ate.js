@@ -27,10 +27,10 @@ const TOTAL = 10;
 
 export default {
   id: 'oto-ate',
-  title: 'おとあて',
+  title: '音当て',
   subtitle: 'この音、なんの音？',
-  icon: '◎',
-  color: '#ff5a8a',
+  icon: '♪',
+  color: '#ff7a59',
   setup: [
     {
       key: 'range',

@@ -81,38 +81,10 @@ export function stars(accuracy) {
   return 0;
 }
 
-// スコア。正解=基礎点×コンボ係数、不正解=0。コンボは10で頭打ち
+// スコア。正解=基礎点×コンボ係数、不正解=0。コンボは10で頭打ち（ラウンド内のみ）
 export function scoreFor({ correct, streakNow = 0, level = 1 }) {
   if (!correct) return 0;
   const base = 100 * (1 + 0.1 * (level - 1));
   const combo = 1 + Math.min(streakNow, 10) * 0.1;
   return Math.round(base * combo);
-}
-
-// ランク8段階（大人向けコピー）
-const RANKS = [
-  { name: 'SIGNAL 0', icon: '◦', at: 0 },
-  { name: 'WARM-UP', icon: '⌁', at: 300 },
-  { name: 'LOCK-IN', icon: '◎', at: 1000 },
-  { name: 'FINE CUT', icon: '△', at: 2500 },
-  { name: 'CLEAN LINE', icon: '◇', at: 5000 },
-  { name: 'EDGE EAR', icon: '▣', at: 9000 },
-  { name: 'MASTER CUT', icon: '◆', at: 15000 },
-  { name: 'ABSOLUTE', icon: '◈', at: 25000 },
-];
-
-export function xpToRank(xp) {
-  let i = 0;
-  for (let k = 0; k < RANKS.length; k++) {
-    if (xp >= RANKS[k].at) i = k;
-  }
-  const r = RANKS[i];
-  const next = RANKS[i + 1];
-  return {
-    name: r.name,
-    icon: r.icon,
-    level: i + 1,
-    prevAt: r.at,
-    nextAt: next ? next.at : null,
-  };
 }
