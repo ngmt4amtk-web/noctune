@@ -1,7 +1,7 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
 import { freqOfMidi, detune } from '../theory.js';
 import { answerGrid, hud, pitchSetPicker } from './components.js';
-import { pop, shake } from './fx.js';
+import { pop, shake, listenRipple, clearFlash } from './fx.js';
 import { createFingerboard } from './fingerboard.js';
 import { scoreFor, makeRng } from '../engine.js';
 
@@ -30,15 +30,17 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   const h = hud({ progress: 0, total, score: 0, combo: 0 });
   const stage = el('div', 'runner-stage');
   const promptEl = el('div', 'runner-prompt');
+  const playWrap = el('div', 'runner-play-wrap');
   const playBtn = el('button', 'runner-play');
   playBtn.textContent = '聴く';
+  playWrap.append(playBtn);
   const timerBar = el('div', 'runner-timer');
   timerBar.style.display = 'none';
   const answerArea = el('div', 'runner-answer');
   const replayBtn = el('button', 'runner-replay');
   replayBtn.textContent = 'もう一度';
   const feedbackEl = el('div', 'runner-feedback');
-  stage.append(promptEl, playBtn, timerBar, answerArea, replayBtn, feedbackEl);
+  stage.append(promptEl, playWrap, timerBar, answerArea, replayBtn, feedbackEl);
   root.append(h.el, stage);
   container.append(root);
 
@@ -201,6 +203,13 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
         synth.stopAll();
         setTransportEnabled(false);
         playBtn.classList.add('is-playing');
+        const voices =
+          q.play?.[0]?.type === 'chord'
+            ? (q.play[0].notes || []).length
+            : q.play?.[0]?.type === 'double'
+            ? 2
+            : 1;
+        listenRipple(playBtn, voices);
         try {
           await playSteps(q.play, () => stillLive(epoch, answered));
         } finally {
@@ -286,6 +295,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       feedbackEl.classList.add('is-correct');
       synth.playFx && synth.playFx('correct');
       pop && pop(feedbackEl);
+      clearFlash(stage);
     } else {
       streak = 0;
       feedbackEl.textContent = q.explain ? `不正解 — ${q.explain}` : '不正解';

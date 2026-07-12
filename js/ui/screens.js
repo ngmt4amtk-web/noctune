@@ -1,7 +1,9 @@
-// 画面遷移 — 深海トーン / 全問結果ログ
-import { bigButton, gameCard, el } from './components.js';
-import { TITLES, ICONS, resolveTitle, resolveIcon } from '../identity.js';
+// 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
+import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js';
+import { iconEl } from './icons.js';
+import { APP_TITLE, APP_TAG, APP_ICON, APP_TAGLINE, applyIdentity } from '../identity.js';
 import { freqOfMidi, detune } from '../theory.js';
+import { isImageIcon } from './icons.js';
 
 let deps = null;
 
@@ -9,18 +11,22 @@ function app() {
   return document.getElementById('app');
 }
 
-function mount(node) {
-  app().replaceChildren(node);
+function mount(node, screenClass) {
+  const root = app();
+  root.className = `app-root screen-${screenClass || 'home'}`;
+  root.replaceChildren(node);
+  // 斜めワイプ用の一瞬クラス
+  root.classList.remove('wipe-in');
+  void root.offsetWidth;
+  root.classList.add('wipe-in');
 }
 
 function brand() {
-  const title = resolveTitle(deps.state.settings);
-  const icon = resolveIcon(deps.state.settings);
   return el('div', { class: 'brand' }, [
-    el('img', { class: 'brand-icon', src: icon.src, alt: title.label, width: '36', height: '36' }),
+    el('img', { class: 'brand-icon', src: APP_ICON, alt: APP_TITLE, width: '40', height: '40' }),
     el('div', {}, [
-      el('div', { class: 'brand-name' }, title.label),
-      el('div', { class: 'brand-tag' }, title.tag),
+      el('div', { class: 'brand-name' }, APP_TITLE),
+      el('div', { class: 'brand-tag' }, APP_TAG),
     ]),
   ]);
 }
@@ -60,6 +66,8 @@ function resolvedConfig(mode) {
     const fallback = item.default ?? item.options?.[0]?.value;
     config[item.key] = saved[item.key] ?? fallback;
   }
+  // 和声的時は size を強制3
+  if (mode.id === 'chord-ate' && config.gen !== 'free') config.size = 3;
   return config;
 }
 
@@ -71,10 +79,23 @@ function rememberConfig(modeId, config) {
 function configLabel(mode, config) {
   const parts = [];
   for (const item of setupItems(mode)) {
+    if (item.key === 'size' && config.gen === 'harmonic') continue;
     const opt = item.options?.find((o) => String(o.value) === String(config?.[item.key]));
     if (opt) parts.push(opt.label);
   }
   return parts.join(' / ') || mode.subtitle || '';
+}
+
+function disabledValuesFor(item, config) {
+  const set = new Set();
+  const dw = item.disableWhen;
+  if (!dw) return set;
+  const watchKey = Object.keys(dw).find((k) => k !== 'values' && k !== 'reason');
+  if (!watchKey) return set;
+  if (String(config[watchKey]) === String(dw[watchKey])) {
+    for (const v of dw.values || []) set.add(String(v));
+  }
+  return set;
 }
 
 function answerLabel(rec) {
@@ -90,10 +111,8 @@ function insightFromLog(modeId, log) {
     const miss = {};
     for (const row of log) {
       if (row.correct) continue;
-      const pc = row.detail?.targetPc;
       const name = row.expected?.label;
       if (name) miss[name] = (miss[name] || 0) + 1;
-      else if (pc != null) miss[String(pc)] = (miss[String(pc)] || 0) + 1;
     }
     const entries = Object.entries(miss).sort((a, b) => b[1] - a[1]);
     if (!entries.length) return '全音名を安定して当てられた';
@@ -103,22 +122,30 @@ function insightFromLog(modeId, log) {
     let hit = 0;
     let total = 0;
     const missedPc = {};
+    const missedRole = {};
+    let harmonicQs = 0;
     for (const row of log) {
       const targets = row.detail?.targetPcs || row.expected?.pcs || [];
       const got = new Set(row.response?.pcs || []);
+      const roles = row.detail?.chord?.roles || [];
+      if (row.detail?.gen === 'harmonic') harmonicQs++;
       for (const pc of targets) {
         total++;
         if (got.has(pc)) hit++;
         else {
           const label = row.expected?.labels?.[targets.indexOf(pc)] || String(pc);
           missedPc[label] = (missedPc[label] || 0) + 1;
+          const role = roles.find((r) => r.pc === pc)?.role;
+          if (role) missedRole[role] = (missedRole[role] || 0) + 1;
         }
       }
     }
     const rate = total ? Math.round((hit / total) * 100) : 0;
     const miss = Object.entries(missedPc).sort((a, b) => b[1] - a[1]).slice(0, 3);
     const missTxt = miss.length ? `／落ちやすい音 ${miss.map(([n, c]) => `${n}×${c}`).join(' ')}` : '';
-    return `構成音の的中 ${hit}/${total}（${rate}%）${missTxt}`;
+    const role = Object.entries(missedRole).sort((a, b) => b[1] - a[1])[0];
+    const roleTxt = harmonicQs && role ? `／${role[0]}の取りこぼし ${role[1]}` : '';
+    return `構成音の的中 ${hit}/${total}（${rate}%）${missTxt}${roleTxt}`;
   }
   if (modeId === 'micro-ear') {
     const cents = log.map((r) => r.detail?.deltaCents).filter((n) => Number.isFinite(n));
@@ -167,15 +194,23 @@ async function replayPlay(steps) {
 }
 
 function renderHome() {
+  applyIdentity();
+  const hero = el('div', { class: 'home-hero' }, [
+    el('div', { class: 'home-hero-mark' }, [
+      el('img', { src: APP_ICON, alt: '', width: '72', height: '72' }),
+    ]),
+    el('h1', { class: 'home-title' }, APP_TITLE),
+    el('p', { class: 'home-tagline' }, APP_TAGLINE),
+  ]);
   const list = el('div', { class: 'game-list' });
   for (const mode of deps.modes) {
     list.appendChild(gameCard(mode, { best: bestFor(mode) }, () => nav.show('setup', { modeId: mode.id })));
   }
-  const top = el('div', { class: 'top-row' }, [
+  const top = el('div', { class: 'top-row home-top' }, [
     brand(),
-    el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('settings') }, '⚙'),
+    iconButton('settings', () => nav.show('settings'), { label: '設定' }),
   ]);
-  mount(el('div', { class: 'screen home' }, [top, list]));
+  mount(el('div', { class: 'screen home' }, [top, hero, list]), 'home');
 }
 
 function renderSetup(params = {}) {
@@ -187,33 +222,76 @@ function renderSetup(params = {}) {
   }
   const config = resolvedConfig(mode);
   const top = el('div', { class: 'top-row' }, [
-    el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
+    iconButton('back', () => nav.show('home'), { label: '戻る' }),
     el('div', { class: 'screen-title' }, mode.title),
     el('div', { style: { width: '44px' } }),
   ]);
-  const banner = el('div', { class: 'setup-banner', style: { '--mode-color': mode.color || 'var(--accent)' } }, [
-    el('div', { class: 'setup-icon' }, mode.icon),
-    el('div', { class: 'setup-sub' }, mode.subtitle || ''),
-  ]);
+
+  const bannerChildren = [];
+  if (isImageIcon(mode.icon)) {
+    bannerChildren.push(el('div', { class: 'setup-bleed', style: { backgroundImage: `url(${mode.icon})` } }));
+    bannerChildren.push(
+      el('div', { class: 'setup-icon is-image' }, [el('img', { src: mode.icon, alt: '', width: '72', height: '72' })])
+    );
+  } else {
+    bannerChildren.push(el('div', { class: 'setup-icon' }, mode.icon));
+  }
+  bannerChildren.push(
+    el('div', { class: 'setup-copy' }, [
+      el('div', { class: 'setup-title' }, mode.title),
+      el('div', { class: 'setup-sub' }, mode.subtitle || ''),
+    ])
+  );
+  const banner = el('div', { class: 'setup-banner', style: { '--mode-color': mode.color || 'var(--accent)' } }, bannerChildren);
+
   const pick = (key, value) => {
     config[key] = value;
+    if (key === 'gen' && value === 'harmonic') config.size = 3;
     rememberConfig(modeId, config);
     deps.synth?.playFx?.('select');
     renderSetup(params);
   };
+
   const blocks = el('div', { class: 'setup-blocks' });
   const hints = [];
   for (const item of setupItems(mode)) {
     if (item.hint) hints.push(item.hint);
-    const row = el('div', { class: 'chip-row wrap' });
-    for (const opt of item.options || []) {
-      const active = String(config[item.key]) === String(opt.value);
-      row.appendChild(
-        el('button', { class: `chip${active ? ' active' : ''}`, type: 'button', onclick: () => pick(item.key, opt.value) }, opt.label)
+    const disabled = disabledValuesFor(item, config);
+    // 和声的時に size ブロックごと隠す
+    if (item.key === 'size' && config.gen === 'harmonic') continue;
+
+    if (item.layout === 'panels') {
+      blocks.appendChild(
+        el('div', { class: 'settings-block' }, [
+          el('div', { class: 'settings-label' }, item.label),
+          optionPanels(item, config[item.key], (v) => pick(item.key, v), { disabledValues: disabled }),
+        ])
       );
+    } else {
+      const row = el('div', { class: 'chip-row wrap' });
+      for (const opt of item.options || []) {
+        const active = String(config[item.key]) === String(opt.value);
+        const isDisabled = disabled.has(String(opt.value));
+        row.appendChild(
+          el(
+            'button',
+            {
+              class: `chip${active ? ' active' : ''}${isDisabled ? ' is-disabled' : ''}`,
+              type: 'button',
+              disabled: isDisabled ? 'disabled' : null,
+              onclick: () => {
+                if (isDisabled) return;
+                pick(item.key, opt.value);
+              },
+            },
+            opt.label
+          )
+        );
+      }
+      blocks.appendChild(el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, item.label), row]));
     }
-    blocks.appendChild(el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, item.label), row]));
   }
+
   const children = [top, banner];
   if (hints.length) children.push(el('div', { class: 'setup-hint' }, hints.join(' ')));
   children.push(blocks);
@@ -227,32 +305,31 @@ function renderSetup(params = {}) {
       }, { variant: 'primary' })
     )
   );
-  mount(el('div', { class: 'screen setup', style: { '--mode-color': mode.color || 'var(--accent)' } }, children));
+  mount(el('div', { class: 'screen setup', style: { '--mode-color': mode.color || 'var(--accent)' } }, children), 'setup');
 }
 
 function renderPlay(params = {}) {
   const { modeId, config } = params;
   const mode = deps.modes.find((m) => m.id === modeId);
   const header = el('div', { class: 'play-header' }, [
-    el(
-      'button',
-      {
-        class: 'icon-btn',
-        type: 'button',
-        onclick: () => {
-          deps.onRoundFinish?.(null);
-          nav.show('home');
-        },
-      },
-      '✕'
-    ),
+    iconButton('close', () => {
+      deps.onRoundFinish?.(null);
+      nav.show('home');
+    }, { label: '終了' }),
     el('div', { class: 'play-header-body' }, [
       el('div', { class: 'play-mode-title' }, mode ? mode.title : ''),
       el('div', { class: 'play-config-label' }, mode ? configLabel(mode, config) : ''),
     ]),
   ]);
-  const roundRoot = el('div', { id: 'round-root' }, el('div', { class: 'round-placeholder' }, '準備中…'));
-  mount(el('div', { class: 'screen play', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [header, roundRoot]));
+  const roundRoot = el('div', { id: 'round-root' }, el('div', { class: 'round-placeholder' }, '準備中'));
+  mount(
+    el('div', { class: 'screen play', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [
+      el('div', { class: 'play-surface' }),
+      header,
+      roundRoot,
+    ]),
+    'play'
+  );
 }
 
 function renderResult(params = {}) {
@@ -275,12 +352,12 @@ function renderResult(params = {}) {
       : null;
 
   const top = el('div', { class: 'top-row' }, [
-    el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
+    iconButton('back', () => nav.show('home'), { label: '戻る' }),
     el('div', { class: 'screen-title' }, '結果'),
     el('div', { style: { width: '44px' } }),
   ]);
 
-  const hero = el('div', { class: 'result-hero card glass', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [
+  const hero = el('div', { class: 'result-hero glass shear', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [
     el('div', { class: 'result-mode' }, mode ? mode.title : ''),
     el('div', { class: 'result-config' }, mode ? configLabel(mode, config) : ''),
     newBest ? el('div', { class: 'best-badge' }, '自己ベスト更新') : null,
@@ -288,16 +365,16 @@ function renderResult(params = {}) {
     el('div', { class: 'record-label' }, recordDisplay ? '記録' : '正答率'),
     el('div', { class: 'result-stats-inline' }, [
       el('span', {}, `${Math.round(accuracy * 100)}%`),
-      el('span', { class: 'dot' }, '·'),
+      el('span', { class: 'dot' }, '/'),
       el('span', {}, `${score} pt`),
-      el('span', { class: 'dot' }, '·'),
+      el('span', { class: 'dot' }, '/'),
       el('span', {}, `${log.filter((r) => r.correct).length}/${log.length || 0}`),
     ]),
   ]);
 
   const insight = insightFromLog(modeId, log);
   const insightCard = insight
-    ? el('div', { class: 'card glass insight-card' }, [
+    ? el('div', { class: 'glass insight-card shear' }, [
         el('div', { class: 'insight-label' }, '聴き分け'),
         el('div', { class: 'insight-text' }, insight),
       ])
@@ -311,7 +388,7 @@ function renderResult(params = {}) {
       el(
         'button',
         {
-          class: `log-row ${row.correct ? 'is-ok' : 'is-ng'}`,
+          class: `log-row shear ${row.correct ? 'is-ok' : 'is-ng'}`,
           type: 'button',
           onclick: () => {
             deps.synth?.playFx?.('select');
@@ -320,12 +397,12 @@ function renderResult(params = {}) {
         },
         [
           el('div', { class: 'log-no' }, String(row.no).padStart(2, '0')),
-          el('div', { class: 'log-mark' }, row.correct ? '●' : '○'),
+          el('div', { class: 'log-mark' }, row.correct ? iconEl('ok', { size: 14 }) : iconEl('ng', { size: 14 })),
           el('div', { class: 'log-body' }, [
             el('div', { class: 'log-expected' }, expected),
             el('div', { class: 'log-response' }, row.correct ? '正解' : `回答 ${got}`),
           ]),
-          el('div', { class: 'log-play' }, '▶'),
+          el('div', { class: 'log-play' }, iconEl('play', { size: 14 })),
         ]
       )
     );
@@ -339,25 +416,18 @@ function renderResult(params = {}) {
     ]),
   ]);
 
-  const children = [top, hero];
-  if (insightCard) children.push(insightCard);
-  if (summary?.detail) children.push(el('div', { class: 'card glass detail-card' }, summary.detail));
+  const children = [top, el('div', { class: 'result-split' }, [hero, insightCard].filter(Boolean))];
+  if (summary?.detail) children.push(el('div', { class: 'glass detail-card shear' }, summary.detail));
   children.push(el('div', { class: 'log-heading' }, '全問レビュー'));
   children.push(list);
   children.push(actions);
-  mount(el('div', { class: 'screen result' }, children));
+  mount(el('div', { class: 'screen result' }, children), 'result');
 }
 
 function renderSettings() {
-  const s = deps.state.settings || {
-    a4: 442,
-    noteStyle: 'doremi',
-    volume: 0.8,
-    titleId: 'otomusubi',
-    iconId: 'warm',
-  };
+  const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8 };
   const top = el('div', { class: 'top-row' }, [
-    el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
+    iconButton('back', () => nav.show('home'), { label: '戻る' }),
     el('div', { class: 'screen-title' }, '設定'),
     el('div', { style: { width: '44px' } }),
   ]);
@@ -383,37 +453,6 @@ function renderSettings() {
       );
     }
     return el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, label), row]);
-  }
-
-  const titleBlock = chipRow(
-    'アプリ名',
-    TITLES.map((t) => ({ label: t.label, value: t.id })),
-    s.titleId || 'otomusubi',
-    (v) => {
-      s.titleId = v;
-      deps.onSettingsChange?.({ titleId: v });
-    }
-  );
-
-  const iconGrid = el('div', { class: 'identity-grid' });
-  for (const icon of ICONS) {
-    const active = (s.iconId || 'warm') === icon.id;
-    iconGrid.appendChild(
-      el(
-        'button',
-        {
-          class: `identity-option${active ? ' active' : ''}`,
-          type: 'button',
-          onclick: () => {
-            deps.synth?.playFx?.('select');
-            s.iconId = icon.id;
-            deps.onSettingsChange?.({ iconId: icon.id });
-            renderSettings();
-          },
-        },
-        [el('img', { src: icon.src, alt: icon.label, width: '56', height: '56' }), el('div', { class: 'id-label' }, icon.label)]
-      )
-    );
   }
 
   const a4Block = chipRow(
@@ -456,8 +495,13 @@ function renderSettings() {
   mount(
     el('div', { class: 'screen settings' }, [
       top,
-      titleBlock,
-      el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, 'アイコン'), iconGrid]),
+      el('div', { class: 'settings-identity shear glass' }, [
+        el('img', { src: APP_ICON, alt: APP_TITLE, width: '56', height: '56' }),
+        el('div', {}, [
+          el('div', { class: 'brand-name' }, APP_TITLE),
+          el('div', { class: 'brand-tag' }, APP_TAGLINE),
+        ]),
+      ]),
       a4Block,
       noteStyleBlock,
       el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, '音量'), volumeInput]),
@@ -466,10 +510,11 @@ function renderSettings() {
         el(
           'p',
           { class: 'about-text' },
-          'おとむすびは聴いて答える耳のトレーニング。音当て・和音当て・音程比較・ハモリ判定。マイク不要。'
+          'NOCTUNE は聴いて答える耳のトレーニング。音当て・和音当て・音程比較・ハモリ判定。マイク不要。'
         ),
       ]),
-    ])
+    ]),
+    'settings'
   );
 }
 

@@ -73,7 +73,7 @@ function clamp(x, lo, hi) {
   return Math.min(hi, Math.max(lo, x));
 }
 
-// 正答率→★数
+// 正答率→星数
 export function stars(accuracy) {
   if (accuracy >= 0.95) return 3;
   if (accuracy >= 0.8) return 2;

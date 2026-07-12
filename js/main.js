@@ -93,8 +93,8 @@ nav.init({
 nav.show('home');
 
 window.addEventListener('error', (e) => {
-  console.error('[otomusubi] error:', e.error || e.message);
+  console.error('[noctune] error:', e.error || e.message);
 });
 window.addEventListener('unhandledrejection', (e) => {
-  console.error('[otomusubi] unhandled rejection:', e.reason);
+  console.error('[noctune] unhandled rejection:', e.reason);
 });

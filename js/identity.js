@@ -1,20 +1,28 @@
-export const TITLES = [
-  { id: 'otomusubi', label: 'おとむすび', tag: 'EAR TRAINING' },
-  { id: 'otonoha', label: 'オトノハ', tag: 'LISTEN & ANSWER' },
-  { id: 'noctune', label: 'NOCTUNE', tag: 'PRECISION' },
-];
+/** NOCTUNE — fixed identity (no title/icon picker). */
 
-export const ICONS = [
-  { id: 'slash', label: 'RING', src: 'assets/icons/noctune-icon-slash.png' },
-  { id: 'warm', label: 'NOTE', src: 'assets/icons/otomusubi-icon.png' },
-  { id: 'fork', label: 'FORK', src: 'assets/icons/noctune-icon-fork.png' },
-  { id: 'arcs', label: 'WAVE', src: 'assets/icons/noctune-icon-arcs.png' },
-];
+export const APP_TITLE = 'NOCTUNE';
+export const APP_TAG = 'EAR TRAINING';
+export const APP_ICON = 'assets/icons/noctune-icon-fork.png';
+export const APP_TAGLINE = '耳を研ぐ。夜に聴く。';
 
-export function resolveTitle(settings = {}) {
-  return TITLES.find((t) => t.id === settings.titleId) || TITLES[0];
+/** @deprecated kept only so old imports fail loudly if misused */
+export const TITLES = [{ id: 'noctune', label: APP_TITLE, tag: APP_TAG }];
+export const ICONS = [{ id: 'fork', label: 'FORK', src: APP_ICON }];
+
+export function resolveTitle() {
+  return { id: 'noctune', label: APP_TITLE, tag: APP_TAG };
 }
 
-export function resolveIcon(settings = {}) {
-  return ICONS.find((i) => i.id === settings.iconId) || ICONS[0];
+export function resolveIcon() {
+  return { id: 'fork', label: 'FORK', src: APP_ICON };
+}
+
+export function applyIdentity() {
+  document.title = APP_TITLE;
+  const metaTitle = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (metaTitle) metaTitle.setAttribute('content', APP_TITLE);
+  const fav = document.querySelector('link[rel="icon"]');
+  if (fav) fav.href = 'assets/icons/favicon.png';
+  const apple = document.querySelector('link[rel="apple-touch-icon"]');
+  if (apple) apple.href = 'assets/icons/app-icon.png';
 }

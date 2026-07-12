@@ -212,7 +212,7 @@ export class Synth {
     };
 
     switch (name) {
-      case 'correct': // ピロン♪ 明るい2音（~280ms）
+      case 'correct': // ピロン 明るい2音（~280ms）
         tone(1046.5, now, 0.12, 0.26, 'triangle'); // C6
         tone(1568.0, now + 0.09, 0.16, 0.22, 'triangle'); // G6
         break;

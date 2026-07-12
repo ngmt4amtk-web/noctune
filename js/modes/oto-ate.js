@@ -1,4 +1,4 @@
-// おとあて: 単音を聴いて音名を当てる
+// 音当て: 単音を聴いて音名を当てる
 import { NOTE_NAMES_DOREMI, NOTE_NAMES_ABC } from '../theory.js';
 
 function pickDifferentMidi(pool, prevPc, rng) {
@@ -28,17 +28,18 @@ const TOTAL = 10;
 export default {
   id: 'oto-ate',
   title: '音当て',
-  subtitle: 'この音、なんの音？',
-  icon: '♪',
+  subtitle: '単音の音名を当てる',
+  icon: 'assets/modes/oto-ate.png',
   color: '#7ec8ff',
   setup: [
     {
       key: 'range',
       label: '音域',
+      layout: 'panels',
       options: [
-        { value: 'mid', label: 'まんなか（ド4〜シ4）' },
-        { value: 'wide', label: 'ひろめ（ソ3〜ミ5）' },
-        { value: '2oct', label: '2オクターブ（ド4〜シ5）' },
+        { value: 'mid', label: '中央', sub: 'ド4〜シ4' },
+        { value: 'wide', label: '広め', sub: 'ソ3〜ミ5' },
+        { value: '2oct', label: '2オクターブ', sub: 'ド4〜シ5' },
       ],
       default: 'mid',
     },
@@ -67,7 +68,7 @@ export default {
         prevPc = pc;
         return {
           play: [{ type: 'note', midi: targetMidi, dur: 1.2 }],
-          prompt: 'この音、なんの音？',
+          prompt: 'この音は？',
           input: { kind: 'buttons', options: names.slice(), correct: pc },
           explain: `答えは「${names[pc]}」`,
           replay: true,

@@ -12,8 +12,6 @@ function defaultState() {
       a4: 442,
       noteStyle: 'doremi',
       volume: 0.8,
-      titleId: 'otomusubi',
-      iconId: 'slash',
     },
     records: {},
     played: {},

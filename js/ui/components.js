@@ -1,4 +1,6 @@
-// UI部品（深海トーン向け）
+// UI部品 — NOCTUNE 斜めガラス／画像アイコン
+
+import { iconEl, isImageIcon } from './icons.js';
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -32,7 +34,20 @@ export function bigButton(label, onClick, opts = {}) {
       disabled: disabled ? 'disabled' : null,
       type: 'button',
     },
-    [icon ? el('span', {}, icon) : null, el('span', {}, label)]
+    [icon ? (typeof icon === 'string' ? el('span', {}, icon) : icon) : null, el('span', {}, label)]
+  );
+}
+
+export function iconButton(name, onClick, opts = {}) {
+  return el(
+    'button',
+    {
+      class: `icon-btn${opts.class ? ` ${opts.class}` : ''}`,
+      type: 'button',
+      'aria-label': opts.label || name,
+      onclick: onClick,
+    },
+    iconEl(name, { size: opts.size || 18 })
   );
 }
 
@@ -59,10 +74,9 @@ export function answerGrid(options, onPick, opts = {}) {
 
 /**
  * 12音トグル選択 → 規定数で「答える」
- * onSubmit({ pcs, labels }) — 音は鳴らさない
  */
 export function pitchSetPicker(input, onSubmit) {
-  const selected = new Map(); // pc -> label
+  const selected = new Map();
   const required = input.requiredCount || 2;
   const wrap = el('div', { class: 'pitch-set' });
   const grid = el('div', { class: 'answer-grid cols3' });
@@ -117,7 +131,8 @@ export function pitchSetPicker(input, onSubmit) {
 
 export function hud(initial = {}) {
   const fill = el('div', { class: 'hud-progress-fill' });
-  const track = el('div', { class: 'hud-progress-track' }, fill);
+  const notches = el('div', { class: 'hud-notches' });
+  const track = el('div', { class: 'hud-progress-track' }, [fill, notches]);
   const score = el('div', { class: 'hud-score' }, '');
   const combo = el('div', { class: 'hud-combo' }, '');
   const root = el('div', { class: 'hud' }, [track, score, combo]);
@@ -129,10 +144,25 @@ export function hud(initial = {}) {
     fill.style.width = `${Math.round(ratio * 100)}%`;
     score.textContent = `${s.score} pt`;
     combo.textContent = s.combo > 1 ? `×${s.combo}` : '';
+    if (s.total > 0 && notches.childElementCount !== s.total) {
+      notches.replaceChildren();
+      for (let i = 0; i < s.total; i++) {
+        notches.appendChild(el('span', { class: 'hud-notch' }));
+      }
+    }
   }
 
   update(initial);
   return { el: root, update };
+}
+
+function modeIconNode(mode) {
+  if (isImageIcon(mode.icon)) {
+    return el('div', { class: 'game-icon is-image' }, [
+      el('img', { src: mode.icon, alt: '', width: '64', height: '64' }),
+    ]);
+  }
+  return el('div', { class: 'game-icon' }, String(mode.icon || ''));
 }
 
 export function gameCard(mode, info, onClick) {
@@ -146,7 +176,10 @@ export function gameCard(mode, info, onClick) {
       onclick: onClick,
     },
     [
-      el('div', { class: 'game-icon' }, mode.icon),
+      isImageIcon(mode.icon)
+        ? el('div', { class: 'game-bleed', style: { backgroundImage: `url(${mode.icon})` } })
+        : null,
+      modeIconNode(mode),
       el('div', { class: 'game-body' }, [
         el('div', { class: 'game-title' }, mode.title),
         el('div', { class: 'game-subtitle' }, mode.subtitle || ''),
@@ -156,10 +189,38 @@ export function gameCard(mode, info, onClick) {
         { class: 'game-best' },
         best
           ? [el('div', { class: 'game-best-label' }, 'BEST'), el('div', { class: 'game-best-value' }, best.display)]
-          : el('div', { class: 'game-best-play' }, '▶')
+          : iconEl('chevron', { size: 16, class: 'game-best-play' })
       ),
     ]
   );
+}
+
+/** Setup option panels (和声的 / フリー 等) */
+export function optionPanels(item, current, onPick, { disabledValues = new Set() } = {}) {
+  const row = el('div', { class: `panel-row${(item.options || []).length <= 2 ? ' dual' : ''}` });
+  for (const opt of item.options || []) {
+    const active = String(current) === String(opt.value);
+    const disabled = disabledValues.has(String(opt.value));
+    row.appendChild(
+      el(
+        'button',
+        {
+          class: `opt-panel${active ? ' active' : ''}${disabled ? ' is-disabled' : ''}`,
+          type: 'button',
+          disabled: disabled ? 'disabled' : null,
+          onclick: () => {
+            if (disabled) return;
+            onPick(opt.value);
+          },
+        },
+        [
+          el('div', { class: 'opt-panel-label' }, opt.label),
+          opt.sub ? el('div', { class: 'opt-panel-sub' }, opt.sub) : null,
+        ]
+      )
+    );
+  }
+  return row;
 }
 
 export { el };

@@ -30,8 +30,8 @@ function resolveStart(config) {
 export default {
   id: 'hamori',
   title: 'ハモリ判定',
-  subtitle: 'きれい？キモい？',
-  icon: '♩',
+  subtitle: 'きれい／キモいを当てる',
+  icon: 'assets/modes/hamori.png',
   color: '#8b9cff',
   setup: [
     {
@@ -50,12 +50,13 @@ export default {
     {
       key: 'startCents',
       label: '最初のズレ幅',
-      hint: '正解が続くと自動で細かくなります。ここで選ぶのは最初のズレ幅だけです。',
+      layout: 'panels',
+      hint: '正解が続くと自動で細かくなる。ここで選ぶのは最初のズレ幅だけ。',
       options: [
-        { value: 40, label: 'はじめて（40¢）' },
-        { value: 25, label: 'ふつう（25¢）' },
-        { value: 10, label: 'せめる（10¢）' },
-        { value: 5, label: '極小（5¢）' },
+        { value: 40, label: 'はじめて', sub: '40¢' },
+        { value: 25, label: 'ふつう', sub: '25¢' },
+        { value: 10, label: 'きびしい', sub: '10¢' },
+        { value: 5, label: '極小', sub: '5¢' },
       ],
       default: 25,
     },
@@ -97,7 +98,7 @@ export default {
 
       return {
         play: [{ type: 'double', midi: lowMidi, interval: [p, q], cents2, dur: 2.2 }],
-        prompt: 'このハモリ、きれい？キモい？',
+        prompt: 'このハモリは？',
         input: { kind: 'buttons', options: ['きれい', 'キモい'], correct: type === 'mis' ? 1 : 0 },
         explain,
         replay: true,

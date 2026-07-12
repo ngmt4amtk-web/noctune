@@ -1,4 +1,4 @@
-// ミクロ耳: セント微差の2AFC弁別
+// 音程比較: セント微差の2AFC弁別
 import { Staircase } from '../engine.js';
 
 const TOTAL = 14;
@@ -13,18 +13,19 @@ function fmtCents(c) {
 export default {
   id: 'micro-ear',
   title: '音程比較',
-  subtitle: '小さなズレを聴き分ける',
-  icon: '↕',
+  subtitle: 'わずかな高低差を聴き分ける',
+  icon: 'assets/modes/micro-ear.png',
   color: '#6aa8ff',
   setup: [
     {
       key: 'start',
       label: 'スタートの差',
+      layout: 'panels',
       options: [
-        { value: 'easy', label: 'やさしい（50¢）' },
-        { value: 'normal', label: 'ふつう（25¢）' },
-        { value: 'hard', label: 'むずかしい（10¢）' },
-        { value: 'oni', label: '鬼（5¢）' },
+        { value: 'easy', label: 'やさしい', sub: '50¢' },
+        { value: 'normal', label: 'ふつう', sub: '25¢' },
+        { value: 'hard', label: 'むずかしい', sub: '10¢' },
+        { value: 'oni', label: '極限', sub: '5¢' },
       ],
       default: 'normal',
     },
