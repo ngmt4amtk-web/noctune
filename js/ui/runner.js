@@ -1,12 +1,12 @@
-// ランナー: 早押し可・回答/再生前にstopAll・世代管理で音被り防止
+// ランナー: 早押し・stopAll・pitch-set・問別ログ
 import { freqOfMidi, detune } from '../theory.js';
-import { answerGrid, hud } from './components.js';
-import { pop, shake, starBurst } from './fx.js';
+import { answerGrid, hud, pitchSetPicker } from './components.js';
+import { pop, shake } from './fx.js';
 import { createFingerboard } from './fingerboard.js';
 import { scoreFor, makeRng } from '../engine.js';
 
 const FEEDBACK_MS = 700;
-const FEEDBACK_MS_LONG = 1000;
+const FEEDBACK_MS_LONG = 1100;
 
 export async function runRound({ mode, config, synth, container, settings = {}, onFinish }) {
   const a4 = settings.a4 || 442;
@@ -19,23 +19,24 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   let correctCount = 0;
   let score = 0;
   let streak = 0;
-  let maxStreak = 0;
   let aborted = false;
   let finished = false;
+  const log = [];
+  let playEpoch = 0;
 
   container.innerHTML = '';
   const root = el('div', 'runner');
-  root.style.setProperty('--mode-color', mode.color || '#ff7a59');
+  root.style.setProperty('--mode-color', mode.color || '#6ec8ff');
   const h = hud({ progress: 0, total, score: 0, combo: 0 });
   const stage = el('div', 'runner-stage');
   const promptEl = el('div', 'runner-prompt');
   const playBtn = el('button', 'runner-play');
-  playBtn.textContent = 'きく';
+  playBtn.textContent = '聴く';
   const timerBar = el('div', 'runner-timer');
   timerBar.style.display = 'none';
   const answerArea = el('div', 'runner-answer');
   const replayBtn = el('button', 'runner-replay');
-  replayBtn.textContent = 'もういちど';
+  replayBtn.textContent = 'もう一度';
   const feedbackEl = el('div', 'runner-feedback');
   stage.append(promptEl, playBtn, timerBar, answerArea, replayBtn, feedbackEl);
   root.append(h.el, stage);
@@ -50,8 +51,6 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   function stillLive(epoch, answered) {
     return !answered && !aborted && container.isConnected && epoch === playEpoch;
   }
-
-  let playEpoch = 0;
 
   async function playSteps(steps, alive) {
     for (const s of steps || []) {
@@ -87,12 +86,48 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
 
   function setAnswerEnabled(on) {
     answerArea.style.pointerEvents = on ? '' : 'none';
-    answerArea.querySelectorAll('button').forEach((b) => (b.disabled = !on));
+    answerArea.querySelectorAll('button').forEach((b) => {
+      if (!on) b.disabled = true;
+    });
   }
 
   function setTransportEnabled(on) {
     playBtn.disabled = !on;
     replayBtn.disabled = !on;
+  }
+
+  function expectedRecord(q) {
+    const input = q.input || {};
+    if (input.kind === 'pitch-set') {
+      const labels = (input.correctPcs || []).map((pc) => {
+        const opt = (input.options || []).find((o) => o.pc === pc);
+        return opt ? opt.label : String(pc);
+      });
+      return { kind: 'pitch-set', pcs: [...(input.correctPcs || [])], labels };
+    }
+    if (input.kind === 'buttons') {
+      const idx = input.correct;
+      const label = input.options?.[idx];
+      return {
+        kind: 'buttons',
+        index: idx,
+        value: label,
+        label: typeof label === 'string' ? label : label?.label ?? String(idx),
+      };
+    }
+    return { kind: 'unknown', label: q.explain || '' };
+  }
+
+  function gradeAnswer(q, response) {
+    if (typeof q.grade === 'function') return !!q.grade(response);
+    if (!response) return false;
+    if (q.input?.kind === 'pitch-set') {
+      const a = [...(response.pcs || [])].sort((x, y) => x - y);
+      const b = [...(q.input.correctPcs || [])].sort((x, y) => x - y);
+      return a.length === b.length && a.every((v, i) => v === b[i]);
+    }
+    if (response.kind === 'buttons') return response.index === q.input.correct;
+    return !!response.correct;
   }
 
   function runQuestion(q) {
@@ -119,10 +154,10 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
         timerBar.style.display = 'none';
       };
 
-      const done = (correct) => {
+      const done = (response) => {
         if (answered || aborted) return;
         answered = true;
-        playEpoch += 1; // 進行中の再生を無効化
+        playEpoch += 1;
         synth.stopAll();
         clearTimers();
         if (!container.isConnected) {
@@ -132,16 +167,33 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
         }
         setAnswerEnabled(false);
         setTransportEnabled(false);
+        const correct = gradeAnswer(q, response);
+        log.push({
+          no: asked,
+          play: q.play,
+          prompt: q.prompt || '',
+          expected: expectedRecord(q),
+          response: response || null,
+          correct,
+          explain: q.explain || '',
+          detail: q.detail || { modeId: mode.id },
+        });
         handleResult(q, correct).then(() => resolve(correct));
       };
 
       if (q.input && q.input.kind === 'buttons') {
-        answerArea.append(answerGrid(q.input.options, (_val, idx) => done(idx === q.input.correct)));
+        answerArea.append(
+          answerGrid(q.input.options, (val, idx) => {
+            const label = typeof q.input.options[idx] === 'string' ? q.input.options[idx] : q.input.options[idx]?.label;
+            done({ kind: 'buttons', index: idx, value: val, label });
+          })
+        );
+      } else if (q.input && q.input.kind === 'pitch-set') {
+        answerArea.append(pitchSetPicker(q.input, (res) => done(res)));
       } else if (q.input && q.input.kind === 'fingerboard') {
-        setupFingerboard(q.input, done);
+        setupFingerboard(q.input, (ok) => done({ kind: 'fingerboard', correct: ok }));
       }
 
-      // 回答は再生中でも可。再生ボタンだけ一時ロック。
       setAnswerEnabled(true);
 
       const doPlay = async () => {
@@ -153,7 +205,6 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
           await playSteps(q.play, () => stillLive(epoch, answered));
         } finally {
           playBtn.classList.remove('is-playing');
-          // 古い再生のfinallyでUIを勝手に戻さない
           if (stillLive(epoch, answered)) setTransportEnabled(true);
         }
       };
@@ -176,7 +227,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
         let start = now();
         const arm = () => {
           start = now();
-          timer = setTimeout(() => done(false), remaining);
+          timer = setTimeout(() => done(null), remaining);
           tick();
         };
         const freeze = () => {
@@ -227,27 +278,24 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   }
 
   async function handleResult(q, correct) {
-    // 刺激はdoneで停止済み。ここから快感SFX。
     if (correct) {
       correctCount++;
       streak++;
-      maxStreak = Math.max(maxStreak, streak);
       score += scoreFor({ correct: true, streakNow: streak });
-      feedbackEl.textContent = q.explain ? `せいかい！ ${q.explain}` : 'せいかい！';
+      feedbackEl.textContent = q.explain ? `正解 — ${q.explain}` : '正解';
       feedbackEl.classList.add('is-correct');
       synth.playFx && synth.playFx('correct');
       pop && pop(feedbackEl);
-      starBurst && starBurst(root, 1);
     } else {
       streak = 0;
-      feedbackEl.textContent = q.explain ? `おしい… ${q.explain}` : 'おしい…';
+      feedbackEl.textContent = q.explain ? `不正解 — ${q.explain}` : '不正解';
       feedbackEl.classList.add('is-wrong');
       synth.playFx && synth.playFx('wrong');
       shake && shake(stage);
     }
     h.update({ current: asked, total, score, combo: streak });
     await sleep(q.explain ? FEEDBACK_MS_LONG : FEEDBACK_MS);
-    synth.stopAll(); // 次問前にSFX残響も掃除
+    synth.stopAll();
   }
 
   let prevCorrect = null;
@@ -262,7 +310,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   if (!container.isConnected) return;
   const summary = round.summary ? round.summary() : {};
   const accuracy = asked > 0 ? correctCount / asked : 0;
-  finish({ accuracy, score, summary, streakMax: maxStreak });
+  finish({ accuracy, score, summary, log });
 }
 
 function el(tag, cls) {

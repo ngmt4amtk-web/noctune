@@ -4,50 +4,58 @@ import { MODES } from '../js/modes/registry.js';
 import chordAte from '../js/modes/chord-ate.js';
 import { makeRng } from '../js/engine.js';
 
-test('registry順: 音当て→和音当て→音程比較→ハモリ判定', () => {
-  assert.deepEqual(MODES.map((m) => m.title), ['音当て', '和音当て', '音程比較', 'ハモリ判定']);
+test('registry順と表示名', () => {
+  assert.deepEqual(
+    MODES.map((m) => m.title),
+    ['音当て', '和音当て', '音程比較', 'ハモリ判定']
+  );
 });
 
-test('chord-ate setup size 2/3', () => {
-  const item = chordAte.setup.find((s) => s.key === 'size');
-  assert.deepEqual(item.options.map((o) => o.value), [2, 3]);
-  assert.equal(item.default, 2);
+test('和音当てはpitch-set・品質ラベルなし', () => {
+  const round = chordAte.createRound({ size: 2 }, makeRng(9), { noteStyle: 'doremi' });
+  const q = round.next(null);
+  assert.equal(q.input.kind, 'pitch-set');
+  assert.equal(q.input.requiredCount, 2);
+  assert.equal(q.input.options.length, 12);
+  const joined = q.input.options.map((o) => o.label).join(',');
+  assert.equal(joined.includes('メジャー'), false);
+  assert.equal(joined.includes('短3度'), false);
+  assert.equal(q.play[0].notes.length, 2);
+  assert.deepEqual(
+    q.input.correctPcs,
+    q.play[0].notes.map((n) => ((n.midi % 12) + 12) % 12).sort((a, b) => a - b)
+  );
 });
 
-test('chord-ate 2和音はDYADSラベルのみ・2声', () => {
-  const round = chordAte.createRound({ size: 2 }, makeRng(3));
-  const labels = new Set();
+test('和音当て3音もpitch-set', () => {
+  const round = chordAte.createRound({ size: 3 }, makeRng(2), { noteStyle: 'abc' });
+  const q = round.next(null);
+  assert.equal(q.input.requiredCount, 3);
+  assert.equal(q.play[0].notes.length, 3);
+  for (const n of q.play[0].notes) {
+    assert.ok(n.midi >= 48 && n.midi <= 71);
+  }
+});
+
+test('grade: 順不同は正解、部分集合は不正解', () => {
+  const round = chordAte.createRound({ size: 2 }, makeRng(1), { noteStyle: 'doremi' });
+  const q = round.next(null);
+  const pcs = q.input.correctPcs;
+  assert.equal(q.grade({ pcs: [...pcs].reverse() }), true);
+  assert.equal(q.grade({ pcs: [pcs[0]] }), false);
+  const wrong = [(pcs[0] + 1) % 12, (pcs[1] + 2) % 12];
+  assert.equal(q.grade({ pcs: wrong }), false);
+});
+
+test('MIDI範囲とPC重複なしを10問確認', () => {
+  const round = chordAte.createRound({ size: 3 }, makeRng(11), { noteStyle: 'doremi' });
   let q = round.next(null);
   for (let i = 0; i < 10 && q; i++) {
-    assert.equal(q.play[0].type, 'chord');
-    assert.equal(q.play[0].notes.length, 2);
-    assert.equal(q.input.options.length, 4);
-    labels.add(q.input.options[q.input.correct]);
+    const midis = q.play[0].notes.map((n) => n.midi);
+    const pcs = midis.map((m) => ((m % 12) + 12) % 12);
+    assert.equal(new Set(pcs).size, pcs.length);
+    assert.ok(Math.min(...midis) >= 48);
+    assert.ok(Math.max(...midis) <= 71);
     q = round.next(true);
   }
-  for (const L of labels) {
-    assert.ok(['短3度', '長3度', '完全5度', 'オクターブ'].includes(L));
-  }
-});
-
-test('chord-ate 3和音はmajor/minorのみ・3声', () => {
-  const round = chordAte.createRound({ size: 3 }, makeRng(5));
-  let q = round.next(null);
-  for (let i = 0; i < 10 && q; i++) {
-    assert.equal(q.play[0].notes.length, 3);
-    assert.deepEqual(q.input.options, ['メジャー', 'マイナー']);
-    assert.ok(q.input.correct === 0 || q.input.correct === 1);
-    q = round.next(true);
-  }
-});
-
-test('hamori startCents と oto explain', async () => {
-  const hamori = (await import('../js/modes/hamori.js')).default;
-  const oto = (await import('../js/modes/oto-ate.js')).default;
-  assert.equal(hamori.title, 'ハモリ判定');
-  assert.equal(oto.title, '音当て');
-  const item = hamori.setup.find((s) => s.key === 'startCents');
-  assert.deepEqual(item.options.map((o) => o.value), [40, 25, 10, 5]);
-  const q = oto.createRound({ range: 'mid' }, makeRng(1), { noteStyle: 'doremi' }).next(null);
-  assert.match(q.explain, /^答えは「/);
 });

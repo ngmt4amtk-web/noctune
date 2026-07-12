@@ -1,4 +1,4 @@
-// UI部品
+// UI部品（深海トーン向け）
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -57,6 +57,64 @@ export function answerGrid(options, onPick, opts = {}) {
   return grid;
 }
 
+/**
+ * 12音トグル選択 → 規定数で「答える」
+ * onSubmit({ pcs, labels }) — 音は鳴らさない
+ */
+export function pitchSetPicker(input, onSubmit) {
+  const selected = new Map(); // pc -> label
+  const required = input.requiredCount || 2;
+  const wrap = el('div', { class: 'pitch-set' });
+  const grid = el('div', { class: 'answer-grid cols3' });
+  const hint = el('div', { class: 'pitch-set-hint' }, `あと ${required} 音選ぶ`);
+  const submit = el('button', { class: 'btn btn-primary pitch-set-submit', type: 'button', disabled: 'disabled' }, input.submitLabel || '答える');
+
+  function refresh() {
+    const left = required - selected.size;
+    hint.textContent = left > 0 ? `あと ${left} 音選ぶ` : `${required} 音選択中`;
+    if (left === 0) submit.removeAttribute('disabled');
+    else submit.setAttribute('disabled', 'disabled');
+    grid.querySelectorAll('.answer-btn').forEach((btn) => {
+      const pc = Number(btn.dataset.pc);
+      btn.classList.toggle('is-selected', selected.has(pc));
+      const atCap = selected.size >= required && !selected.has(pc);
+      btn.classList.toggle('is-disabled', atCap);
+      btn.disabled = atCap;
+    });
+  }
+
+  for (const opt of input.options || []) {
+    const pc = typeof opt === 'object' ? opt.pc : opt;
+    const label = typeof opt === 'object' ? opt.label : String(opt);
+    const btn = el(
+      'button',
+      {
+        class: 'answer-btn',
+        type: 'button',
+        'data-pc': String(pc),
+        onclick: () => {
+          if (selected.has(pc)) selected.delete(pc);
+          else if (selected.size < required) selected.set(pc, label);
+          refresh();
+        },
+      },
+      label
+    );
+    grid.appendChild(btn);
+  }
+
+  submit.onclick = () => {
+    if (selected.size !== required) return;
+    const pcs = [...selected.keys()].sort((a, b) => a - b);
+    const labels = pcs.map((pc) => selected.get(pc));
+    onSubmit({ kind: 'pitch-set', pcs, labels });
+  };
+
+  wrap.append(hint, grid, submit);
+  refresh();
+  return wrap;
+}
+
 export function hud(initial = {}) {
   const fill = el('div', { class: 'hud-progress-fill' });
   const track = el('div', { class: 'hud-progress-track' }, fill);
@@ -70,7 +128,7 @@ export function hud(initial = {}) {
     const ratio = s.total > 0 ? Math.min(1, s.current / s.total) : 0;
     fill.style.width = `${Math.round(ratio * 100)}%`;
     score.textContent = `${s.score} pt`;
-    combo.textContent = s.combo > 1 ? `コンボ ${s.combo}` : '';
+    combo.textContent = s.combo > 1 ? `×${s.combo}` : '';
   }
 
   update(initial);
@@ -97,29 +155,11 @@ export function gameCard(mode, info, onClick) {
         'div',
         { class: 'game-best' },
         best
-          ? [el('div', { class: 'game-best-label' }, 'ベスト'), el('div', { class: 'game-best-value' }, best.display)]
+          ? [el('div', { class: 'game-best-label' }, 'BEST'), el('div', { class: 'game-best-value' }, best.display)]
           : el('div', { class: 'game-best-play' }, '▶')
       ),
     ]
   );
-}
-
-/** ストリークだけの軽いバー（ランク廃止） */
-export function streakBar(streak = 0) {
-  return el('div', { class: 'card streak-bar' }, [
-    el('div', { class: 'streak-bar-label' }, 'れんぞく'),
-    el('div', { class: 'streak-bar-value' }, streak > 0 ? `${streak}日` : 'きょうから'),
-  ]);
-}
-
-export function tipCard(text, source = 'ひとこと') {
-  return el('div', { class: 'card tip-card' }, [
-    el('div', { class: 'tip-icon' }, '♪'),
-    el('div', { class: 'tip-body' }, [
-      el('div', { class: 'tip-text' }, text),
-      source ? el('div', { class: 'tip-source' }, source) : null,
-    ]),
-  ]);
 }
 
 export { el };

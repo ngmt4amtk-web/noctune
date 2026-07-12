@@ -32,7 +32,7 @@ export default {
   title: 'ハモリ判定',
   subtitle: 'きれい？キモい？',
   icon: '♩',
-  color: '#7b6cff',
+  color: '#8b9cff',
   setup: [
     {
       key: 'hibiki',
@@ -101,6 +101,15 @@ export default {
         input: { kind: 'buttons', options: ['きれい', 'キモい'], correct: type === 'mis' ? 1 : 0 },
         explain,
         replay: true,
+        detail: {
+          modeId: 'hamori',
+          lowMidi,
+          ratioId: ratioName,
+          ratio: [p, q],
+          tuning: type === 'mis' ? 'mistuned' : 'pure',
+          offsetCents: cents2,
+          beatHz: beat,
+        },
       };
     }
 

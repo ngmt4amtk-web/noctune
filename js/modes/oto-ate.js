@@ -30,7 +30,7 @@ export default {
   title: '音当て',
   subtitle: 'この音、なんの音？',
   icon: '♪',
-  color: '#ff7a59',
+  color: '#7ec8ff',
   setup: [
     {
       key: 'range',
@@ -71,6 +71,7 @@ export default {
           input: { kind: 'buttons', options: names.slice(), correct: pc },
           explain: `答えは「${names[pc]}」`,
           replay: true,
+          detail: { modeId: 'oto-ate', targetMidi, targetPc: pc },
         };
       },
       summary() {

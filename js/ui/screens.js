@@ -1,7 +1,7 @@
-// 画面遷移
-import { bigButton, gameCard, streakBar, tipCard, el } from './components.js';
-import { confetti, starBurst } from './fx.js';
+// 画面遷移 — 深海トーン / 全問結果ログ
+import { bigButton, gameCard, el } from './components.js';
 import { TITLES, ICONS, resolveTitle, resolveIcon } from '../identity.js';
+import { freqOfMidi, detune } from '../theory.js';
 
 let deps = null;
 
@@ -11,15 +11,6 @@ function app() {
 
 function mount(node) {
   app().replaceChildren(node);
-}
-
-function todaysTip() {
-  const list = deps.tips;
-  if (Array.isArray(list) && list.length > 0) {
-    const idx = (deps.state.tipCursor || 0) % list.length;
-    return list[idx];
-  }
-  return 'ちょっと聴いて、当てる。それだけで耳は育つ。';
 }
 
 function brand() {
@@ -86,25 +77,105 @@ function configLabel(mode, config) {
   return parts.join(' / ') || mode.subtitle || '';
 }
 
+function answerLabel(rec) {
+  if (!rec) return '—';
+  if (rec.kind === 'pitch-set') return (rec.labels || []).join('・') || '—';
+  if (rec.label != null) return String(rec.label);
+  return '—';
+}
+
+function insightFromLog(modeId, log) {
+  if (!Array.isArray(log) || !log.length) return null;
+  if (modeId === 'oto-ate') {
+    const miss = {};
+    for (const row of log) {
+      if (row.correct) continue;
+      const pc = row.detail?.targetPc;
+      const name = row.expected?.label;
+      if (name) miss[name] = (miss[name] || 0) + 1;
+      else if (pc != null) miss[String(pc)] = (miss[String(pc)] || 0) + 1;
+    }
+    const entries = Object.entries(miss).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return '全音名を安定して当てられた';
+    return `落としやすい音: ${entries.slice(0, 3).map(([n, c]) => `${n}×${c}`).join(' / ')}`;
+  }
+  if (modeId === 'chord-ate') {
+    let hit = 0;
+    let total = 0;
+    const missedPc = {};
+    for (const row of log) {
+      const targets = row.detail?.targetPcs || row.expected?.pcs || [];
+      const got = new Set(row.response?.pcs || []);
+      for (const pc of targets) {
+        total++;
+        if (got.has(pc)) hit++;
+        else {
+          const label = row.expected?.labels?.[targets.indexOf(pc)] || String(pc);
+          missedPc[label] = (missedPc[label] || 0) + 1;
+        }
+      }
+    }
+    const rate = total ? Math.round((hit / total) * 100) : 0;
+    const miss = Object.entries(missedPc).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const missTxt = miss.length ? `／落ちやすい音 ${miss.map(([n, c]) => `${n}×${c}`).join(' ')}` : '';
+    return `構成音の的中 ${hit}/${total}（${rate}%）${missTxt}`;
+  }
+  if (modeId === 'micro-ear') {
+    const cents = log.map((r) => r.detail?.deltaCents).filter((n) => Number.isFinite(n));
+    const ok = log.filter((r) => r.correct);
+    const bestOk = ok.map((r) => r.detail?.deltaCents).filter((n) => Number.isFinite(n));
+    const minOk = bestOk.length ? Math.min(...bestOk) : null;
+    return minOk != null
+      ? `正解できた最小差 ${minOk.toFixed(1)}セント（出題幅 ${Math.min(...cents).toFixed(1)}〜${Math.max(...cents).toFixed(1)}）`
+      : '今回は正解なし（差の感度はまだ測定中）';
+  }
+  if (modeId === 'hamori') {
+    const pure = log.filter((r) => r.detail?.tuning === 'pure');
+    const mis = log.filter((r) => r.detail?.tuning === 'mistuned');
+    const pureOk = pure.filter((r) => r.correct).length;
+    const misOk = mis.filter((r) => r.correct).length;
+    const misCents = mis.filter((r) => r.correct).map((r) => Math.abs(r.detail?.offsetCents || 0));
+    const minMis = misCents.length ? Math.min(...misCents) : null;
+    const tail = minMis != null ? `／ズレ問で聴き分けた最小 ${minMis.toFixed(1)}セント` : '';
+    return `純正 ${pureOk}/${pure.length}・ズレ ${misOk}/${mis.length}${tail}`;
+  }
+  return null;
+}
+
+async function replayPlay(steps) {
+  const synth = deps.synth;
+  if (!synth || !steps) return;
+  const a4 = deps.state.settings?.a4 || 442;
+  synth.stopAll();
+  await synth.ensureRunning();
+  for (const s of steps) {
+    if (s.type === 'note') {
+      const f = detune(freqOfMidi(s.midi, a4), s.cents || 0);
+      await synth.playNote({ freq: f, dur: Math.min(s.dur ?? 1, 1.2) });
+    } else if (s.type === 'gap') {
+      await new Promise((r) => setTimeout(r, (s.dur ?? 0.3) * 1000));
+    } else if (s.type === 'double') {
+      const f1 = detune(freqOfMidi(s.midi, a4), s.cents || 0);
+      let f2 = s.interval ? (f1 * s.interval[0]) / s.interval[1] : detune(f1, s.cents2 || 0);
+      if (s.interval && s.cents2) f2 = detune(f2, s.cents2);
+      await synth.playDoubleStop({ f1, f2, dur: Math.min(s.dur ?? 2, 1.6) });
+    } else if (s.type === 'chord') {
+      const freqs = (s.notes || []).map((n) => detune(freqOfMidi(n.midi, a4), n.cents || 0));
+      await synth.playChord({ freqs, dur: Math.min(s.dur ?? 1.6, 1.4) });
+    }
+  }
+}
+
 function renderHome() {
   const list = el('div', { class: 'game-list' });
   for (const mode of deps.modes) {
     list.appendChild(gameCard(mode, { best: bestFor(mode) }, () => nav.show('setup', { modeId: mode.id })));
   }
-
   const top = el('div', { class: 'top-row' }, [
     brand(),
     el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('settings') }, '⚙'),
   ]);
-
-  mount(
-    el('div', { class: 'screen home' }, [
-      top,
-      streakBar(deps.state.streak?.count || 0),
-      list,
-      tipCard(todaysTip()),
-    ])
-  );
+  mount(el('div', { class: 'screen home' }, [top, list]));
 }
 
 function renderSetup(params = {}) {
@@ -115,25 +186,21 @@ function renderSetup(params = {}) {
     return;
   }
   const config = resolvedConfig(mode);
-
   const top = el('div', { class: 'top-row' }, [
     el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
     el('div', { class: 'screen-title' }, mode.title),
     el('div', { style: { width: '44px' } }),
   ]);
-
   const banner = el('div', { class: 'setup-banner', style: { '--mode-color': mode.color || 'var(--accent)' } }, [
     el('div', { class: 'setup-icon' }, mode.icon),
     el('div', { class: 'setup-sub' }, mode.subtitle || ''),
   ]);
-
   const pick = (key, value) => {
     config[key] = value;
     rememberConfig(modeId, config);
     deps.synth?.playFx?.('select');
     renderSetup(params);
   };
-
   const blocks = el('div', { class: 'setup-blocks' });
   const hints = [];
   for (const item of setupItems(mode)) {
@@ -147,7 +214,6 @@ function renderSetup(params = {}) {
     }
     blocks.appendChild(el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, item.label), row]));
   }
-
   const children = [top, banner];
   if (hints.length) children.push(el('div', { class: 'setup-hint' }, hints.join(' ')));
   children.push(blocks);
@@ -155,20 +221,18 @@ function renderSetup(params = {}) {
     el(
       'div',
       { class: 'setup-start' },
-      bigButton('はじめる', () => {
+      bigButton('スタート', () => {
         rememberConfig(modeId, config);
         nav.show('play', { modeId, config });
       }, { variant: 'primary' })
     )
   );
-
   mount(el('div', { class: 'screen setup', style: { '--mode-color': mode.color || 'var(--accent)' } }, children));
 }
 
 function renderPlay(params = {}) {
   const { modeId, config } = params;
   const mode = deps.modes.find((m) => m.id === modeId);
-
   const header = el('div', { class: 'play-header' }, [
     el(
       'button',
@@ -183,20 +247,12 @@ function renderPlay(params = {}) {
       '✕'
     ),
     el('div', { class: 'play-header-body' }, [
-      el('div', { class: 'play-mode-title' }, mode ? `${mode.icon} ${mode.title}` : ''),
+      el('div', { class: 'play-mode-title' }, mode ? mode.title : ''),
       el('div', { class: 'play-config-label' }, mode ? configLabel(mode, config) : ''),
     ]),
   ]);
-
-  const roundRoot = el('div', { id: 'round-root' }, el('div', { class: 'round-placeholder' }, 'じゅんび中…'));
+  const roundRoot = el('div', { id: 'round-root' }, el('div', { class: 'round-placeholder' }, '準備中…'));
   mount(el('div', { class: 'screen play', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [header, roundRoot]));
-}
-
-function statBox(value, label) {
-  return el('div', { class: 'stat-box card' }, [
-    el('div', { class: 'stat-value' }, value),
-    el('div', { class: 'stat-label' }, label),
-  ]);
 }
 
 function renderResult(params = {}) {
@@ -205,13 +261,12 @@ function renderResult(params = {}) {
     config,
     accuracy = 0,
     score = 0,
-    newBadges = [],
     summary,
     record = null,
     newBest = false,
+    log = [],
   } = params;
   const mode = deps.modes.find((m) => m.id === modeId);
-
   const recordDisplay =
     record && typeof record.display === 'string'
       ? record.display
@@ -219,54 +274,78 @@ function renderResult(params = {}) {
       ? formatRecordValue(mode, record.value)
       : null;
 
-  const burstZone = el('div', { class: 'result-burst-zone' });
-  const heroChildren = [burstZone];
-  if (newBest) heroChildren.push(el('div', { class: 'best-badge' }, 'じこベスト！'));
-  if (recordDisplay) {
-    heroChildren.push(el('div', { class: 'record-value' }, recordDisplay));
-    heroChildren.push(el('div', { class: 'record-label' }, 'きろく'));
-  }
-  heroChildren.push(el('div', { class: 'result-title' }, mode ? `${mode.icon} ${mode.title}` : 'おつかれ！'));
-  const hero = el('div', { class: 'result-hero card', style: { '--mode-color': mode?.color || 'var(--accent)' } }, heroChildren);
-
-  const stats = el('div', { class: 'result-stats' }, [
-    statBox(`${Math.round(accuracy * 100)}%`, 'せいかい'),
-    statBox(String(score), 'ポイント'),
+  const top = el('div', { class: 'top-row' }, [
+    el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
+    el('div', { class: 'screen-title' }, '結果'),
+    el('div', { style: { width: '44px' } }),
   ]);
 
-  const children = [hero, stats, streakBar(deps.state.streak?.count || 0)];
+  const hero = el('div', { class: 'result-hero card glass', style: { '--mode-color': mode?.color || 'var(--accent)' } }, [
+    el('div', { class: 'result-mode' }, mode ? mode.title : ''),
+    el('div', { class: 'result-config' }, mode ? configLabel(mode, config) : ''),
+    newBest ? el('div', { class: 'best-badge' }, '自己ベスト更新') : null,
+    recordDisplay ? el('div', { class: 'record-value' }, recordDisplay) : el('div', { class: 'record-value' }, `${Math.round(accuracy * 100)}%`),
+    el('div', { class: 'record-label' }, recordDisplay ? '記録' : '正答率'),
+    el('div', { class: 'result-stats-inline' }, [
+      el('span', {}, `${Math.round(accuracy * 100)}%`),
+      el('span', { class: 'dot' }, '·'),
+      el('span', {}, `${score} pt`),
+      el('span', { class: 'dot' }, '·'),
+      el('span', {}, `${log.filter((r) => r.correct).length}/${log.length || 0}`),
+    ]),
+  ]);
 
-  if (summary?.detail) {
-    children.push(el('div', { class: 'card detail-card' }, summary.detail));
+  const insight = insightFromLog(modeId, log);
+  const insightCard = insight
+    ? el('div', { class: 'card glass insight-card' }, [
+        el('div', { class: 'insight-label' }, '聴き分け'),
+        el('div', { class: 'insight-text' }, insight),
+      ])
+    : null;
+
+  const list = el('div', { class: 'result-log' });
+  for (const row of log) {
+    const expected = answerLabel(row.expected);
+    const got = answerLabel(row.response);
+    list.appendChild(
+      el(
+        'button',
+        {
+          class: `log-row ${row.correct ? 'is-ok' : 'is-ng'}`,
+          type: 'button',
+          onclick: () => {
+            deps.synth?.playFx?.('select');
+            replayPlay(row.play);
+          },
+        },
+        [
+          el('div', { class: 'log-no' }, String(row.no).padStart(2, '0')),
+          el('div', { class: 'log-mark' }, row.correct ? '●' : '○'),
+          el('div', { class: 'log-body' }, [
+            el('div', { class: 'log-expected' }, expected),
+            el('div', { class: 'log-response' }, row.correct ? '正解' : `回答 ${got}`),
+          ]),
+          el('div', { class: 'log-play' }, '▶'),
+        ]
+      )
+    );
   }
 
-  if (newBadges.length > 0) {
-    const row = el('div', { class: 'badge-row' });
-    for (const b of newBadges) if (b) row.appendChild(el('div', { class: 'badge-pill' }, [b.icon, ' ', b.name]));
-    children.push(row);
-  }
+  const actions = el('div', { class: 'result-actions' }, [
+    bigButton('もう一度', () => nav.show('play', { modeId, config }), { variant: 'primary' }),
+    el('div', { class: 'btn-row' }, [
+      bigButton('設定を変える', () => nav.show('setup', { modeId }), { variant: 'ghost' }),
+      bigButton('ホーム', () => nav.show('home'), { variant: 'ghost' }),
+    ]),
+  ]);
 
-  children.push(tipCard(todaysTip()));
-
-  children.push(
-    el('div', { class: 'result-actions' }, [
-      bigButton('もういっかい', () => nav.show('play', { modeId, config }), { variant: 'primary' }),
-      el('div', { class: 'btn-row' }, [
-        bigButton('せってい', () => nav.show('setup', { modeId }), { variant: 'ghost' }),
-        bigButton('ホーム', () => nav.show('home'), { variant: 'ghost' }),
-      ]),
-    ])
-  );
-
+  const children = [top, hero];
+  if (insightCard) children.push(insightCard);
+  if (summary?.detail) children.push(el('div', { class: 'card glass detail-card' }, summary.detail));
+  children.push(el('div', { class: 'log-heading' }, '全問レビュー'));
+  children.push(list);
+  children.push(actions);
   mount(el('div', { class: 'screen result' }, children));
-
-  if (newBest) {
-    deps.synth?.playFx?.('newBest');
-    starBurst(burstZone, 5);
-    confetti(hero);
-  } else {
-    starBurst(burstZone, 3);
-  }
 }
 
 function renderSettings() {
@@ -275,12 +354,11 @@ function renderSettings() {
     noteStyle: 'doremi',
     volume: 0.8,
     titleId: 'otomusubi',
-    iconId: 'slash',
+    iconId: 'warm',
   };
-
   const top = el('div', { class: 'top-row' }, [
     el('button', { class: 'icon-btn', type: 'button', onclick: () => nav.show('home') }, '←'),
-    el('div', { class: 'screen-title' }, 'せってい'),
+    el('div', { class: 'screen-title' }, '設定'),
     el('div', { style: { width: '44px' } }),
   ]);
 
@@ -319,7 +397,7 @@ function renderSettings() {
 
   const iconGrid = el('div', { class: 'identity-grid' });
   for (const icon of ICONS) {
-    const active = (s.iconId || 'slash') === icon.id;
+    const active = (s.iconId || 'warm') === icon.id;
     iconGrid.appendChild(
       el(
         'button',
@@ -337,10 +415,6 @@ function renderSettings() {
       )
     );
   }
-  const iconBlock = el('div', { class: 'settings-block' }, [
-    el('div', { class: 'settings-label' }, 'アイコン'),
-    iconGrid,
-  ]);
 
   const a4Block = chipRow(
     '基準音 A4',
@@ -355,9 +429,8 @@ function renderSettings() {
       deps.onSettingsChange?.({ a4: v });
     }
   );
-
   const noteStyleBlock = chipRow(
-    '音名',
+    '音名表記',
     [
       { label: 'ドレミ', value: 'doremi' },
       { label: 'ABC', value: 'abc' },
@@ -368,7 +441,6 @@ function renderSettings() {
       deps.onSettingsChange?.({ noteStyle: v });
     }
   );
-
   const volumeInput = el('input', {
     type: 'range',
     min: '0',
@@ -380,18 +452,25 @@ function renderSettings() {
       deps.onSettingsChange?.({ volume: s.volume });
     },
   });
-  const volumeBlock = el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, 'おんりょう'), volumeInput]);
 
-  const about = el('div', { class: 'settings-block' }, [
-    el('div', { class: 'settings-label' }, 'このアプリ'),
-    el(
-      'p',
-      { class: 'about-text' },
-      'おとむすびは、聴いて当てるだけの耳トレ。音当て・和音当て・音程比較・ハモリ判定。マイク不要。みみクエストの別アプリ。'
-    ),
-  ]);
-
-  mount(el('div', { class: 'screen settings' }, [top, titleBlock, iconBlock, a4Block, noteStyleBlock, volumeBlock, about]));
+  mount(
+    el('div', { class: 'screen settings' }, [
+      top,
+      titleBlock,
+      el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, 'アイコン'), iconGrid]),
+      a4Block,
+      noteStyleBlock,
+      el('div', { class: 'settings-block' }, [el('div', { class: 'settings-label' }, '音量'), volumeInput]),
+      el('div', { class: 'settings-block' }, [
+        el('div', { class: 'settings-label' }, 'このアプリ'),
+        el(
+          'p',
+          { class: 'about-text' },
+          'おとむすびは聴いて答える耳のトレーニング。音当て・和音当て・音程比較・ハモリ判定。マイク不要。'
+        ),
+      ]),
+    ])
+  );
 }
 
 export const nav = {

@@ -13,9 +13,9 @@ function fmtCents(c) {
 export default {
   id: 'micro-ear',
   title: '音程比較',
-  subtitle: 'ちいさなズレを聴き分けろ',
+  subtitle: '小さなズレを聴き分ける',
   icon: '↕',
-  color: '#4d8dff',
+  color: '#6aa8ff',
   setup: [
     {
       key: 'start',
@@ -87,6 +87,12 @@ export default {
           input: { kind: 'buttons', options: OPTIONS, correct: high ? 0 : 1 },
           explain: high ? `+${disp}セント高かった` : `−${disp}セント低かった`,
           replay: false,
+          detail: {
+            modeId: 'micro-ear',
+            referenceMidi: refMidi,
+            deltaCents: cents,
+            direction: high ? 'higher' : 'lower',
+          },
         };
       },
       summary() {

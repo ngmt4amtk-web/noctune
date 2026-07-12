@@ -1,15 +1,10 @@
-// おとむすび エントリ
-import { loadState, saveState, recordResult, tipIndexForToday, configKeyOf } from './state.js';
+import { loadState, saveState, recordResult, configKeyOf } from './state.js';
 import { Synth, unlockOnFirstGesture } from './audio.js';
 import { runRound } from './ui/runner.js';
 import { nav } from './ui/screens.js';
 import { MODES } from './modes/registry.js';
-import { TIPS } from './data/tips.js';
 
 const state = loadState();
-tipIndexForToday(state);
-const tips = TIPS.map((t) => t.text);
-
 const synth = new Synth();
 synth.setVolume(state.settings.volume);
 unlockOnFirstGesture(synth);
@@ -59,7 +54,6 @@ function onRoundComplete(result, mode, config) {
   }
   const rec = typeof mode.record === 'function' ? mode.record(result.summary) : null;
   const diff = recordResult(state, mode.id, configKeyOf(config), {
-    streakMax: result.streakMax,
     record: rec,
     better: mode.recordBetter || 'low',
   });
@@ -68,10 +62,10 @@ function onRoundComplete(result, mode, config) {
     config,
     accuracy: result.accuracy,
     score: result.score,
-    newBadges: diff.newBadges,
     summary: result.summary,
     record: diff.record ? { value: diff.record.value, display: diff.record.display } : null,
     newBest: !!(diff.record && diff.record.improved),
+    log: result.log || [],
   });
 }
 
@@ -80,7 +74,7 @@ nav.show = (id, params = {}) => {
     startPlay(params);
     return;
   }
-  if (id !== 'play') synth.stopAll();
+  synth.stopAll();
   origShow(id, params);
 };
 
@@ -88,7 +82,6 @@ nav.init({
   state,
   synth,
   modes: MODES,
-  tips,
   onRoundFinish: () => synth.stopAll(),
   onSettingsChange: (patch) => {
     Object.assign(state.settings, patch);

@@ -1,16 +1,14 @@
-// 表示名・アイコン（設定から任意変更・初回必須ゲートなし）
-
 export const TITLES = [
-  { id: 'otomusubi', label: 'おとむすび', tag: 'きいて あてる' },
-  { id: 'otonoha', label: 'オトノハ', tag: 'おととあそぶ' },
-  { id: 'noctune', label: 'NOCTUNE', tag: 'ear precision' },
+  { id: 'otomusubi', label: 'おとむすび', tag: 'EAR TRAINING' },
+  { id: 'otonoha', label: 'オトノハ', tag: 'LISTEN & ANSWER' },
+  { id: 'noctune', label: 'NOCTUNE', tag: 'PRECISION' },
 ];
 
 export const ICONS = [
-  { id: 'warm', label: 'おんぷ', src: 'assets/icons/otomusubi-icon.png' },
-  { id: 'slash', label: 'リング', src: 'assets/icons/noctune-icon-slash.png' },
-  { id: 'fork', label: 'フォーク', src: 'assets/icons/noctune-icon-fork.png' },
-  { id: 'arcs', label: 'ウェーブ', src: 'assets/icons/noctune-icon-arcs.png' },
+  { id: 'slash', label: 'RING', src: 'assets/icons/noctune-icon-slash.png' },
+  { id: 'warm', label: 'NOTE', src: 'assets/icons/otomusubi-icon.png' },
+  { id: 'fork', label: 'FORK', src: 'assets/icons/noctune-icon-fork.png' },
+  { id: 'arcs', label: 'WAVE', src: 'assets/icons/noctune-icon-arcs.png' },
 ];
 
 export function resolveTitle(settings = {}) {
