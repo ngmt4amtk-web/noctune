@@ -1,9 +1,9 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0713a3';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0713a3';
-import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0713a3';
-import { createFingerboard } from './fingerboard.js?v=0713a3';
-import { scoreFor, makeRng } from '../engine.js?v=0713a3';
+import { freqOfMidi, detune } from '../theory.js?v=0713a4';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0713a4';
+import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0713a4';
+import { createFingerboard } from './fingerboard.js?v=0713a4';
+import { scoreFor, makeRng } from '../engine.js?v=0713a4';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;

@@ -43,11 +43,10 @@ export default {
     {
       key: 'accidental',
       label: '臨時記号',
-      layout: 'panels',
       options: [
-        { value: 'none', label: '記号なし', sub: '白鍵だけ' },
-        { value: 'sharp', label: 'シャープあり', sub: '♯表記' },
-        { value: 'flat', label: 'フラットあり', sub: '♭表記' },
+        { value: 'none', label: '記号なし' },
+        { value: 'sharp', label: 'シャープ' },
+        { value: 'flat', label: 'フラット' },
       ],
       default: 'sharp',
     },

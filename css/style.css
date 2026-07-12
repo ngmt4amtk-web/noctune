@@ -382,6 +382,10 @@ button { font-family: inherit; color: inherit; }
 }
 .chip-row { display: flex; gap: 8px; }
 .chip-row.wrap { flex-wrap: wrap; }
+.chip-row.compact { flex-wrap: nowrap; }
+.chip-row.compact .chip {
+  flex: 1 1 0; min-width: 0; padding: 0 8px; font-size: 12px; letter-spacing: 0.02em;
+}
 .chip {
   flex: 1; min-width: 88px; min-height: 46px; padding: 0 14px;
   clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), 0 100%);

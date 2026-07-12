@@ -272,7 +272,9 @@ function renderSetup(params = {}) {
         ])
       );
     } else {
-      const row = el('div', { class: 'chip-row wrap' });
+      const row = el('div', {
+        class: `chip-row${(item.options || []).length <= 3 ? ' compact' : ' wrap'}`,
+      });
       for (const opt of item.options || []) {
         const active = String(config[item.key]) === String(opt.value);
         const isDisabled = disabled.has(String(opt.value));
