@@ -1,11 +1,19 @@
 // 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
-import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js';
-import { iconEl } from './icons.js';
-import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js';
-import { freqOfMidi, detune } from '../theory.js';
-import { isImageIcon } from './icons.js';
+import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0713a2';
+import { iconEl } from './icons.js?v=0713a2';
+import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0713a2';
+import { freqOfMidi, detune } from '../theory.js?v=0713a2';
+import { isImageIcon } from './icons.js?v=0713a2';
 
 let deps = null;
+
+function tap(fn) {
+  return (...args) => {
+    deps?.synth?.ensureRunning?.();
+    deps?.synth?.playFx?.('select');
+    return fn?.(...args);
+  };
+}
 
 function app() {
   return document.getElementById('app');
@@ -194,11 +202,17 @@ function renderHome() {
   applyIdentity();
   const list = el('div', { class: 'game-list' });
   for (const mode of deps.modes) {
-    list.appendChild(gameCard(mode, { best: bestFor(mode) }, () => nav.show('setup', { modeId: mode.id })));
+    list.appendChild(
+      gameCard(
+        mode,
+        { best: bestFor(mode) },
+        tap(() => nav.show('setup', { modeId: mode.id }))
+      )
+    );
   }
   const top = el('div', { class: 'top-row home-top' }, [
     brand(),
-    iconButton('settings', () => nav.show('settings'), { label: '設定' }),
+    iconButton('settings', tap(() => nav.show('settings')), { label: '設定' }),
   ]);
   mount(el('div', { class: 'screen home' }, [top, list]), 'home');
 }
@@ -212,7 +226,7 @@ function renderSetup(params = {}) {
   }
   const config = resolvedConfig(mode);
   const top = el('div', { class: 'top-row' }, [
-    iconButton('back', () => nav.show('home'), { label: '戻る' }),
+    iconButton('back', tap(() => nav.show('home')), { label: '戻る' }),
     el('div', { class: 'screen-title' }, mode.title),
     el('div', { style: { width: '44px' } }),
   ]);
@@ -237,6 +251,7 @@ function renderSetup(params = {}) {
     config[key] = value;
     if (key === 'gen' && value === 'harmonic') config.size = 3;
     rememberConfig(modeId, config);
+    deps.synth?.ensureRunning?.();
     deps.synth?.playFx?.('select');
     renderSetup(params);
   };
@@ -288,10 +303,14 @@ function renderSetup(params = {}) {
     el(
       'div',
       { class: 'setup-start' },
-      bigButton('スタート', () => {
-        rememberConfig(modeId, config);
-        nav.show('play', { modeId, config });
-      }, { variant: 'primary' })
+      bigButton(
+        'スタート',
+        tap(() => {
+          rememberConfig(modeId, config);
+          nav.show('play', { modeId, config });
+        }),
+        { variant: 'primary' }
+      )
     )
   );
   mount(el('div', { class: 'screen setup', style: { '--mode-color': mode.color || 'var(--accent)' } }, children), 'setup');
@@ -301,10 +320,14 @@ function renderPlay(params = {}) {
   const { modeId, config } = params;
   const mode = deps.modes.find((m) => m.id === modeId);
   const header = el('div', { class: 'play-header' }, [
-    iconButton('close', () => {
-      deps.onRoundFinish?.(null);
-      nav.show('home');
-    }, { label: '終了' }),
+    iconButton(
+      'close',
+      tap(() => {
+        deps.onRoundFinish?.(null);
+        nav.show('home');
+      }),
+      { label: '終了' }
+    ),
     el('div', { class: 'play-header-body' }, [
       el('div', { class: 'play-mode-title' }, mode ? mode.title : ''),
       el('div', { class: 'play-config-label' }, mode ? configLabel(mode, config) : ''),
@@ -341,7 +364,7 @@ function renderResult(params = {}) {
       : null;
 
   const top = el('div', { class: 'top-row' }, [
-    iconButton('back', () => nav.show('home'), { label: '戻る' }),
+    iconButton('back', tap(() => nav.show('home')), { label: '戻る' }),
     el('div', { class: 'screen-title' }, '結果'),
     el('div', { style: { width: '44px' } }),
   ]);
@@ -380,6 +403,7 @@ function renderResult(params = {}) {
           class: `log-row shear ${row.correct ? 'is-ok' : 'is-ng'}`,
           type: 'button',
           onclick: () => {
+            deps.synth?.ensureRunning?.();
             deps.synth?.playFx?.('select');
             replayPlay(row.play);
           },
@@ -398,10 +422,10 @@ function renderResult(params = {}) {
   }
 
   const actions = el('div', { class: 'result-actions' }, [
-    bigButton('もう一度', () => nav.show('play', { modeId, config }), { variant: 'primary' }),
+    bigButton('もう一度', tap(() => nav.show('play', { modeId, config })), { variant: 'primary' }),
     el('div', { class: 'btn-row' }, [
-      bigButton('設定を変える', () => nav.show('setup', { modeId }), { variant: 'ghost' }),
-      bigButton('ホーム', () => nav.show('home'), { variant: 'ghost' }),
+      bigButton('設定を変える', tap(() => nav.show('setup', { modeId })), { variant: 'ghost' }),
+      bigButton('ホーム', tap(() => nav.show('home')), { variant: 'ghost' }),
     ]),
   ]);
 
@@ -416,7 +440,7 @@ function renderResult(params = {}) {
 function renderSettings() {
   const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8, questionCount: 10 };
   const top = el('div', { class: 'top-row' }, [
-    iconButton('back', () => nav.show('home'), { label: '戻る' }),
+    iconButton('back', tap(() => nav.show('home')), { label: '戻る' }),
     el('div', { class: 'screen-title' }, '設定'),
     el('div', { style: { width: '44px' } }),
   ]);
@@ -432,6 +456,7 @@ function renderSettings() {
             class: `chip${active ? ' active' : ''}`,
             type: 'button',
             onclick: () => {
+              deps.synth?.ensureRunning?.();
               deps.synth?.playFx?.('select');
               onPick(opt.value);
               renderSettings();

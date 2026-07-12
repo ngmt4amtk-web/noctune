@@ -228,7 +228,8 @@ export class Synth {
         break;
       case 'select':
       case 'tap':
-        tone(880, now, 0.04, 0.12, 'sine');
+        // 短いピッ
+        tone(1320, now, 0.028, 0.14, 'sine');
         break;
       default:
         break;

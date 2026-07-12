@@ -1,6 +1,6 @@
 // 音当て: 単音を聴いて音名を当てる
-import { noteNamesFor, WHITE_PCS } from '../theory.js';
-import { resolveQuestionCount } from '../identity.js';
+import { noteNamesFor, WHITE_PCS } from '../theory.js?v=0713a2';
+import { resolveQuestionCount } from '../identity.js?v=0713a2';
 
 function pickDifferentMidi(pool, prevPc, rng) {
   if (pool.length <= 1) return pool[0];
@@ -43,10 +43,11 @@ export default {
     {
       key: 'accidental',
       label: '臨時記号',
+      layout: 'panels',
       options: [
-        { value: 'none', label: '記号なし' },
-        { value: 'sharp', label: 'シャープあり' },
-        { value: 'flat', label: 'フラットあり' },
+        { value: 'none', label: '記号なし', sub: '白鍵だけ' },
+        { value: 'sharp', label: 'シャープあり', sub: '♯表記' },
+        { value: 'flat', label: 'フラットあり', sub: '♭表記' },
       ],
       default: 'sharp',
     },

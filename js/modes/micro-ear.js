@@ -1,6 +1,6 @@
 // 音程比較: セント微差の2AFC弁別
-import { Staircase } from '../engine.js';
-import { resolveQuestionCount } from '../identity.js';
+import { Staircase } from '../engine.js?v=0713a2';
+import { resolveQuestionCount } from '../identity.js?v=0713a2';
 
 const OPTIONS = ['高い', '低い'];
 const STARTS = { easy: 50, normal: 25, hard: 10, oni: 5 };

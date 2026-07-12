@@ -1,8 +1,8 @@
-import { loadState, saveState, recordResult, configKeyOf } from './state.js';
-import { Synth, unlockOnFirstGesture } from './audio.js';
-import { runRound } from './ui/runner.js';
-import { nav } from './ui/screens.js';
-import { MODES } from './modes/registry.js';
+import { loadState, saveState, recordResult, configKeyOf } from './state.js?v=0713a2';
+import { Synth, unlockOnFirstGesture } from './audio.js?v=0713a2';
+import { runRound } from './ui/runner.js?v=0713a2';
+import { nav } from './ui/screens.js?v=0713a2';
+import { MODES } from './modes/registry.js?v=0713a2';
 
 const state = loadState();
 const synth = new Synth();

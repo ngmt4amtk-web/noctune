@@ -1,7 +1,7 @@
 // ハモリ判定。純正とうなりを聴き分ける。ズレ幅はステアケース初期値のみ。
-import { JI_RATIOS, beatRate, freqOfMidi, detune } from '../theory.js';
-import { Staircase, shuffle, pickDifferent } from '../engine.js';
-import { resolveQuestionCount } from '../identity.js';
+import { JI_RATIOS, beatRate, freqOfMidi, detune } from '../theory.js?v=0713a2';
+import { Staircase, shuffle, pickDifferent } from '../engine.js?v=0713a2';
+import { resolveQuestionCount } from '../identity.js?v=0713a2';
 
 const RATIO_JA = { P5: '完全5度', P8: 'オクターブ', P4: '完全4度', M3: '長3度', m3: '短3度' };
 const ALL = ['P5', 'P8', 'P4', 'M3', 'm3'];
