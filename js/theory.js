@@ -19,9 +19,22 @@ export function centsBetween(f1, f2) {
 
 export const NOTE_NAMES_DOREMI = ['ド', 'ド♯', 'レ', 'レ♯', 'ミ', 'ファ', 'ファ♯', 'ソ', 'ソ♯', 'ラ', 'ラ♯', 'シ'];
 export const NOTE_NAMES_ABC = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'];
+export const NOTE_NAMES_DOREMI_FLAT = ['ド', 'レ♭', 'レ', 'ミ♭', 'ミ', 'ファ', 'ソ♭', 'ソ', 'ラ♭', 'ラ', 'シ♭', 'シ'];
+export const NOTE_NAMES_ABC_FLAT = ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'];
+/** 白鍵のピッチクラス（C D E F G A B） */
+export const WHITE_PCS = [0, 2, 4, 5, 7, 9, 11];
+
+/**
+ * @param {'doremi'|'abc'} style
+ * @param {'none'|'sharp'|'flat'} accidental
+ */
+export function noteNamesFor(style = 'doremi', accidental = 'sharp') {
+  if (accidental === 'flat') return style === 'abc' ? NOTE_NAMES_ABC_FLAT : NOTE_NAMES_DOREMI_FLAT;
+  return style === 'abc' ? NOTE_NAMES_ABC : NOTE_NAMES_DOREMI;
+}
 
 function namesFor(style) {
-  return style === 'abc' ? NOTE_NAMES_ABC : NOTE_NAMES_DOREMI;
+  return noteNamesFor(style, 'sharp');
 }
 
 // オクターブ番号を除いた音名

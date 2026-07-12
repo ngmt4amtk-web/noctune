@@ -80,6 +80,17 @@ test('NOTE_NAMES配列は12要素で先頭が基準音', () => {
   assert.equal(NOTE_NAMES_ABC[0], 'C');
 });
 
+test('FLAT表記配列と noteNamesFor', async () => {
+  const { NOTE_NAMES_DOREMI_FLAT, NOTE_NAMES_ABC_FLAT, noteNamesFor, WHITE_PCS } = await import(
+    '../js/theory.js'
+  );
+  assert.equal(NOTE_NAMES_DOREMI_FLAT[1], 'レ♭');
+  assert.equal(NOTE_NAMES_ABC_FLAT[10], 'B♭');
+  assert.deepEqual(noteNamesFor('abc', 'flat').slice(0, 3), ['C', 'D♭', 'D']);
+  assert.equal(noteNamesFor('doremi', 'sharp')[1], 'ド♯');
+  assert.deepEqual(WHITE_PCS, [0, 2, 4, 5, 7, 9, 11]);
+});
+
 test('positionsForString の指番号マッピング', () => {
   const pos = positionsForString(0); // G線
   assert.deepEqual(

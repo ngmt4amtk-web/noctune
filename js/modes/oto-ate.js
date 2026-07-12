@@ -1,5 +1,5 @@
 // 音当て: 単音を聴いて音名を当てる
-import { NOTE_NAMES_DOREMI, NOTE_NAMES_ABC } from '../theory.js';
+import { noteNamesFor, WHITE_PCS } from '../theory.js';
 import { resolveQuestionCount } from '../identity.js';
 
 function pickDifferentMidi(pool, prevPc, rng) {
@@ -18,11 +18,20 @@ function midiRange(a, b) {
   return out;
 }
 
+function pcOf(midi) {
+  return ((midi % 12) + 12) % 12;
+}
+
 const RANGES = {
   mid: midiRange(60, 71),
   wide: midiRange(55, 76),
   '2oct': midiRange(60, 83),
 };
+
+function resolveAccidental(config) {
+  const v = config?.accidental;
+  return v === 'none' || v === 'flat' || v === 'sharp' ? v : 'sharp';
+}
 
 export default {
   id: 'oto-ate',
@@ -31,6 +40,16 @@ export default {
   icon: 'assets/modes/oto-ate.png',
   color: '#7ec8ff',
   setup: [
+    {
+      key: 'accidental',
+      label: '臨時記号',
+      options: [
+        { value: 'none', label: 'シャープ・フラットなし' },
+        { value: 'sharp', label: 'シャープあり' },
+        { value: 'flat', label: 'フラットあり' },
+      ],
+      default: 'sharp',
+    },
     {
       key: 'range',
       label: '音域',
@@ -51,8 +70,19 @@ export default {
   needsFingerboard: false,
   createRound(config = {}, rng, opts = {}) {
     const style = opts.noteStyle || opts.settings?.noteStyle || 'doremi';
-    const names = style === 'abc' ? NOTE_NAMES_ABC : NOTE_NAMES_DOREMI;
-    const pool = RANGES[config.range] || RANGES.mid;
+    const accidental = resolveAccidental(config);
+    const allNames = noteNamesFor(style, accidental === 'flat' ? 'flat' : 'sharp');
+    let pool = RANGES[config.range] || RANGES.mid;
+    let optionPcs;
+    let options;
+    if (accidental === 'none') {
+      pool = pool.filter((m) => WHITE_PCS.includes(pcOf(m)));
+      optionPcs = WHITE_PCS.slice();
+      options = optionPcs.map((pc) => allNames[pc]);
+    } else {
+      optionPcs = [...Array(12).keys()];
+      options = allNames.slice();
+    }
     const total = resolveQuestionCount(opts.settings);
     let asked = 0;
     let correctCount = 0;
@@ -64,15 +94,22 @@ export default {
         if (asked >= total) return null;
         asked++;
         const targetMidi = pickDifferentMidi(pool, prevPc, rng);
-        const pc = ((targetMidi % 12) + 12) % 12;
+        const pc = pcOf(targetMidi);
         prevPc = pc;
+        const correct = optionPcs.indexOf(pc);
+        const label = options[correct];
         return {
           play: [{ type: 'note', midi: targetMidi, dur: 1.2 }],
           prompt: 'この音は？',
-          input: { kind: 'buttons', options: names.slice(), correct: pc },
-          explain: `答えは「${names[pc]}」`,
+          input: { kind: 'buttons', options: options.slice(), correct },
+          explain: `答えは「${label}」`,
           replay: true,
-          detail: { modeId: 'oto-ate', targetMidi, targetPc: pc },
+          detail: {
+            modeId: 'oto-ate',
+            targetMidi,
+            targetPc: pc,
+            accidental,
+          },
         };
       },
       summary() {

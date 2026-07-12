@@ -19,6 +19,50 @@ test('全モードが画像アイコンを持つ', () => {
   }
 });
 
+test('音当て: シャープ・フラットなしは白鍵のみ・7択', () => {
+  const oto = MODES.find((m) => m.id === 'oto-ate');
+  const WHITE = [0, 2, 4, 5, 7, 9, 11];
+  const round = oto.createRound({ accidental: 'none', range: 'mid' }, makeRng(4), {
+    settings: { questionCount: 10, noteStyle: 'doremi' },
+  });
+  assert.equal(round.total, 10);
+  let q = round.next(null);
+  for (let i = 0; i < 10 && q; i++) {
+    assert.equal(q.input.options.length, 7);
+    assert.ok(WHITE.includes(q.detail.targetPc));
+    const joined = q.input.options.join('');
+    assert.equal(joined.includes('♯'), false);
+    assert.equal(joined.includes('♭'), false);
+    assert.ok(q.input.correct >= 0 && q.input.correct < 7);
+    assert.equal(q.input.options[q.input.correct], q.explain.match(/「(.+)」/)[1]);
+    q = round.next(true);
+  }
+});
+
+test('音当て: フラットありは♭表記・♯なし', () => {
+  const oto = MODES.find((m) => m.id === 'oto-ate');
+  const round = oto.createRound({ accidental: 'flat', range: 'mid' }, makeRng(5), {
+    settings: { questionCount: 5, noteStyle: 'abc' },
+  });
+  const q = round.next(null);
+  assert.equal(q.input.options.length, 12);
+  const joined = q.input.options.join('');
+  assert.ok(joined.includes('♭'));
+  assert.equal(joined.includes('♯'), false);
+  assert.deepEqual(q.input.options.slice(0, 3), ['C', 'D♭', 'D']);
+});
+
+test('音当て: シャープありは既定どおり♯', () => {
+  const oto = MODES.find((m) => m.id === 'oto-ate');
+  const round = oto.createRound({ range: 'mid' }, makeRng(6), {
+    settings: { questionCount: 3, noteStyle: 'doremi' },
+  });
+  const q = round.next(null);
+  assert.equal(q.input.options.length, 12);
+  assert.ok(q.input.options.join('').includes('♯'));
+  assert.equal(q.detail.accidental, 'sharp');
+});
+
 test('設定の問題数が全モードに効く', () => {
   for (const mode of MODES) {
     const round5 = mode.createRound({}, makeRng(1), { settings: { questionCount: 5 } });
