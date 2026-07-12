@@ -44,7 +44,7 @@ export default {
       key: 'accidental',
       label: '臨時記号',
       options: [
-        { value: 'none', label: 'シャープ・フラットなし' },
+        { value: 'none', label: '記号なし' },
         { value: 'sharp', label: 'シャープあり' },
         { value: 'flat', label: 'フラットあり' },
       ],
