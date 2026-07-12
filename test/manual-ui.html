@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>UIフレーム 手動確認（I-05）</title>
+<link rel="stylesheet" href="../css/style.css">
+<style>
+  /* デバッグパネルのみ最小限のスタイル（app本体のデザインはstyle.css任せ） */
+  #debug-panel { max-width: 480px; margin: 0 auto; padding: 12px 16px 40px; font-family: system-ui, sans-serif; }
+  #debug-panel h2 { font-size: 13px; color: #8a8074; }
+  #debug-panel button { display: inline-block; margin: 4px 6px 4px 0; padding: 8px 12px; border-radius: 8px; border: 1px solid #ece3d6; background: #fff; }
+  #log { font-size: 11px; white-space: pre-wrap; color: #8a8074; margin-top: 10px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<div id="debug-panel">
+  <h2>手動確認用パネル（本アプリのUIではない）</h2>
+  <button data-go="home">→ home</button>
+  <button data-go="settings">→ settings</button>
+  <button data-go="result-1">→ result（★1想定）</button>
+  <button data-go="result-3">→ result（★3・全演出）</button>
+  <button data-go="result-badge">→ result（バッジ・ランクアップ付き）</button>
+  <div id="log"></div>
+</div>
+
+<script type="module">
+import { nav } from '../js/ui/screens.js';
+
+const log = (m) => { document.getElementById('log').textContent += m + '\n'; };
+
+// --- モックstate（js/state.js の loadState() 相当の形） ---
+const mockState = {
+  version: 1,
+  settings: { a4: 442, noteStyle: 'doremi', volume: 0.8 },
+  xp: 640,
+  modes: {
+    'oto-ate': { unlockedLevel: 3, stars: { 1: 3, 2: 2 } },
+    'aida-ate': { unlockedLevel: 2, stars: { 1: 1 } },
+    'kata-ate': { unlockedLevel: 1, stars: {} },
+    'micro-ear': { unlockedLevel: 1, stars: {} },
+    'hamori': { unlockedLevel: 1, stars: {} },
+    'manekko': { unlockedLevel: 1, stars: {} },
+  },
+  streak: { last: null, count: 4 },
+  badges: [],
+  tipCursor: 0,
+};
+
+// --- ダミーmodes配列（本物は js/modes/*.js + registry.js、I-05では未依存） ---
+const dummyCreateRound = () => ({
+  total: 5,
+  next: () => null,
+  summary: () => ({ accuracy: 1, passed: true }),
+});
+
+const modes = [
+  { id: 'oto-ate', title: 'おとあて', subtitle: '音名をあてよう', icon: '🎵', color: '#ff9f5a', levels: 10, levelLabel: (lv) => `レベル ${lv}`, needsFingerboard: false, createRound: dummyCreateRound },
+  { id: 'aida-ate', title: 'あいだ当て', subtitle: '音程をあてよう', icon: '📏', color: '#5aa9ff', levels: 10, levelLabel: (lv) => `レベル ${lv}`, needsFingerboard: false, createRound: dummyCreateRound },
+  { id: 'kata-ate', title: 'かたち当て', subtitle: '指の形をあてよう', icon: '✋', color: '#ff7ab8', levels: 10, levelLabel: (lv) => `レベル ${lv}`, needsFingerboard: true, createRound: dummyCreateRound },
+  { id: 'micro-ear', title: 'ミクロ耳', subtitle: '1セントの違いを聴き分けろ', icon: '🔬', color: '#7c5cff', levels: 10, levelLabel: (lv) => `ねらい: ${60 - lv * 4}セント`, needsFingerboard: false, createRound: dummyCreateRound },
+  { id: 'hamori', title: 'ハモリ判定', subtitle: '澄んでる？うなってる？', icon: '🎻', color: '#45b787', levels: 10, levelLabel: (lv) => `レベル ${lv}`, needsFingerboard: false, createRound: dummyCreateRound },
+  { id: 'manekko', title: 'まねっこ', subtitle: '旋律を指板でなぞろう', icon: '🐥', color: '#ffc94d', levels: 10, levelLabel: (lv) => `レベル ${lv}`, needsFingerboard: true, createRound: dummyCreateRound },
+];
+
+// --- ダミーsynth（audio.jsは所有外なので最小限のダミーで代替） ---
+const dummySynth = { stopAll: () => log('synth.stopAll() 呼び出し') };
+
+// --- computeRank/tips もダミー注入（engine.js/state.js/data/tips.js は所有外） ---
+function computeRank(xp) {
+  const ranks = [
+    { name: '音感のたまご', icon: '🥚', at: 0 },
+    { name: 'ひよこ耳', icon: '🐣', at: 300 },
+    { name: 'まる耳', icon: '👂', at: 1000 },
+    { name: 'さえずり耳', icon: '🐦', at: 2500 },
+  ];
+  let idx = 0;
+  for (let i = 0; i < ranks.length; i++) if (xp >= ranks[i].at) idx = i;
+  const next = ranks[idx + 1];
+  return { name: ranks[idx].name, icon: ranks[idx].icon, level: idx + 1, prevAt: ranks[idx].at, nextAt: next ? next.at : null };
+}
+
+const tips = [
+  'まずは1ラウンド。耳は「回数」で育ちます。',
+  '正解した音を、あとで実際にバイオリンで鳴らしてみましょう。',
+];
+
+nav.init({
+  state: mockState,
+  synth: dummySynth,
+  modes,
+  onRoundFinish: (result) => log('onRoundFinish: ' + JSON.stringify(result)),
+  onSettingsChange: (patch) => log('onSettingsChange: ' + JSON.stringify(patch)),
+  computeRank,
+  tips,
+});
+
+nav.show('home');
+log('nav.show(home) 完了');
+
+document.getElementById('debug-panel').addEventListener('click', (e) => {
+  const go = e.target?.dataset?.go;
+  if (!go) return;
+  if (go === 'home') nav.show('home');
+  else if (go === 'settings') nav.show('settings');
+  else if (go === 'result-1') {
+    nav.show('result', {
+      modeId: 'oto-ate', level: 3, accuracy: 0.62, score: 340,
+      starsEarned: 1, xpGained: 120,
+      rankAfter: computeRank(mockState.xp + 120),
+      newBadges: [], summary: { detail: 'あと一歩！もう一度聴いてみましょう。' },
+    });
+  } else if (go === 'result-3') {
+    nav.show('result', {
+      modeId: 'micro-ear', level: 5, accuracy: 1.0, score: 980,
+      starsEarned: 3, xpGained: 300,
+      rankAfter: computeRank(mockState.xp + 300),
+      newBadges: [], summary: { detail: '全問正解！ねらいのセント差に到達しました。' },
+    });
+  } else if (go === 'result-badge') {
+    nav.show('result', {
+      modeId: 'hamori', level: 2, accuracy: 0.9, score: 500,
+      starsEarned: 2, xpGained: 400,
+      rankAfter: computeRank(mockState.xp + 400),
+      newBadges: [{ id: 'streak7', name: '一週間の耳', icon: '🔥' }, { id: 'chosen-hamori2', name: '調弦の耳', icon: '🎻' }],
+      summary: { detail: 'いい響きでした。' },
+    });
+  }
+  log('nav.show(' + go + ')');
+});
+
+window.addEventListener('error', (e) => log('ERROR: ' + e.message));
+</script>
+</body>
+</html>

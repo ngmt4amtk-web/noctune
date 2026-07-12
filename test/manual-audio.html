@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>audio.js 手動確認</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 0 auto; padding: 16px; background: #fdf8ef; }
+  h1 { font-size: 18px; }
+  button { display: block; width: 100%; min-height: 48px; margin: 8px 0; font-size: 16px; border: none; border-radius: 10px; background: #7c5cff; color: #fff; }
+  .fx { background: #2aa88a; }
+  .beat { background: #d9772b; }
+  #log { font-size: 12px; white-space: pre-wrap; margin-top: 16px; color: #555; }
+</style>
+</head>
+<body>
+<h1>audio.js 手動確認</h1>
+<p>まず任意のボタンを押すと AudioContext がアンロックされます。</p>
+
+<h2 style="font-size:14px">単音（音域チェック）</h2>
+<button data-a="low">低音 ソ3 = 196Hz</button>
+<button data-a="mid">中音 ラ4 = 442Hz</button>
+<button data-a="high">高音 = 1000Hz</button>
+<button data-a="note-vib">中音 (vibrato=true)</button>
+<button data-a="seq">playSequence ドレミ</button>
+<h2 style="font-size:14px">ハモリ聴き比べ（純正 vs ズレ）</h2>
+<button class="beat" data-a="just5">純正5度 A3=220 &amp; 330（うなりゼロ）</button>
+<button class="beat" data-a="off5">+10セント（うなりが聴こえる）</button>
+<button class="fx" data-a="fx-correct">playFx correct</button>
+<button class="fx" data-a="fx-wrong">playFx wrong</button>
+<button class="fx" data-a="fx-fanfare">playFx fanfare</button>
+<button class="fx" data-a="fx-tap">playFx tap</button>
+<button data-a="stop">stopAll</button>
+
+<div id="log"></div>
+
+<script type="module">
+import { Synth, unlockOnFirstGesture } from '../js/audio.js';
+
+const synth = new Synth();
+unlockOnFirstGesture(synth);
+const log = (m) => { document.getElementById('log').textContent += m + '\n'; };
+
+// 純正5度からのセントずらし: 330 * 2^(10/1200)
+const detune = (f, c) => f * Math.pow(2, c / 1200);
+
+const actions = {
+  low: () => synth.playNote({ freq: 196, dur: 1.2 }),
+  mid: () => synth.playNote({ freq: 442, dur: 1.2 }),
+  high: () => synth.playNote({ freq: 1000, dur: 1.2 }),
+  'note-vib': () => synth.playNote({ freq: 442, dur: 1.2, vibrato: true }),
+  seq: () => synth.playSequence([
+    { freq: 264, dur: 0.4, gap: 0.05 },
+    { freq: 297, dur: 0.4, gap: 0.05 },
+    { freq: 330, dur: 0.5 },
+  ]),
+  just5: () => synth.playDoubleStop({ f1: 220, f2: 330, dur: 2.5 }),
+  off5: () => synth.playDoubleStop({ f1: 220, f2: detune(330, 10), dur: 2.5 }),
+  'fx-correct': () => synth.playFx('correct'),
+  'fx-wrong': () => synth.playFx('wrong'),
+  'fx-fanfare': () => synth.playFx('fanfare'),
+  'fx-tap': () => synth.playFx('tap'),
+  stop: () => synth.stopAll(),
+};
+
+document.querySelectorAll('button').forEach((b) => {
+  b.addEventListener('click', async () => {
+    const a = b.dataset.a;
+    try {
+      await synth.ensureRunning();
+      await actions[a]();
+      log(a + ' ok');
+    } catch (e) {
+      log(a + ' ERROR: ' + e.message);
+      console.error(e);
+    }
+  });
+});
+</script>
+</body>
+</html>

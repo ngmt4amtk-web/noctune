@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>指板 手動テスト</title>
+<style>
+  body { margin:0; padding:16px; background:#faf6ee; color:#3a3226;
+    font:16px/1.5 ui-rounded,'Hiragino Maru Gothic ProN',system-ui,sans-serif; }
+  h1 { font-size:18px; }
+  #stage { max-width:430px; margin:0 auto; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+  button { min-height:44px; padding:8px 14px; border:none; border-radius:12px;
+    background:#e7dcc7; color:#3a3226; font:600 15px ui-rounded,system-ui,sans-serif; }
+  button:active { transform:scale(.96); }
+  #log { font:12px/1.4 ui-monospace,monospace; background:#2c2622; color:#e9e2d5;
+    padding:8px; border-radius:8px; height:120px; overflow:auto; white-space:pre-wrap; }
+</style>
+<!-- theory.js が未実装でも単体で動くよう、契約準拠のスタブを import map で注入 -->
+<script>
+(function () {
+  const NOTES = ['ド','ド♯','レ','レ♯','ミ','ファ','ファ♯','ソ','ソ♯','ラ','ラ♯','シ'];
+  const ABC = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+  const FINGERS = [0, 1, 1, 2, 2, 3, 3, 4];
+  const stub = `
+export const STRINGS=[{name:'G線',midi:55},{name:'D線',midi:62},{name:'A線',midi:69},{name:'E線',midi:76}];
+const N=${JSON.stringify(NOTES)},A=${JSON.stringify(ABC)},F=${JSON.stringify(FINGERS)};
+export function positionsForString(si,style='doremi'){
+  const base=STRINGS[si].midi, names=style==='abc'?A:N, out=[];
+  for(let s=0;s<8;s++){const midi=base+s;out.push({semi:s,midi,finger:F[s],label:names[midi%12]});}
+  return out;
+}`;
+  const url = URL.createObjectURL(new Blob([stub], { type: 'text/javascript' }));
+  const im = document.createElement('script');
+  im.type = 'importmap';
+  im.textContent = JSON.stringify({ imports: { '../js/theory.js': url } });
+  document.currentScript.after(im);
+})();
+</script>
+</head>
+<body>
+<h1>指板 手動テスト</h1>
+<div id="stage"></div>
+<div class="row">
+  <button id="b-anchor">anchor</button>
+  <button id="b-correct">correct</button>
+  <button id="b-wrong">wrong</button>
+  <button id="b-hint">hint</button>
+  <button id="b-flash">flash</button>
+  <button id="b-clear">clear</button>
+  <button id="b-toggle">enable切替</button>
+  <button id="b-destroy">destroy</button>
+</div>
+<pre id="log"></pre>
+
+<script type="module">
+import { createFingerboard } from '../js/ui/fingerboard.js';
+
+const logEl = document.getElementById('log');
+const log = (m) => { logEl.textContent += m + '\n'; logEl.scrollTop = logEl.scrollHeight; };
+
+const fb = createFingerboard({
+  container: document.getElementById('stage'),
+  noteStyle: 'doremi',
+  onTap: (c) => log(`tap string=${c.stringIndex} semi=${c.semi} midi=${c.midi}`),
+});
+
+const sample = [{ stringIndex: 2, semi: 0 }, { stringIndex: 2, semi: 2 }, { stringIndex: 3, semi: 3 }];
+let on = true;
+const $ = (id) => document.getElementById(id);
+$('b-anchor').onclick = () => fb.highlight([sample[0]], 'anchor');
+$('b-correct').onclick = () => fb.highlight(sample, 'correct');
+$('b-wrong').onclick = () => fb.highlight([sample[1]], 'wrong');
+$('b-hint').onclick = () => fb.highlight(sample, 'hint');
+$('b-flash').onclick = () => fb.flash(sample[2], 'tap');
+$('b-clear').onclick = () => fb.clear();
+$('b-toggle').onclick = () => { on = !on; fb.setEnabled(on); log('enabled=' + on); };
+$('b-destroy').onclick = () => { fb.destroy(); log('destroyed'); };
+log('ready');
+</script>
+</body>
+</html>
