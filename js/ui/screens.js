@@ -1,9 +1,9 @@
 // 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
-import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0713a4';
-import { iconEl } from './icons.js?v=0713a4';
-import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0713a4';
-import { freqOfMidi, detune } from '../theory.js?v=0713a4';
-import { isImageIcon } from './icons.js?v=0713a4';
+import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0718a1';
+import { iconEl } from './icons.js?v=0718a1';
+import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0718a1';
+import { freqOfMidi, detune } from '../theory.js?v=0718a1';
+import { isImageIcon } from './icons.js?v=0718a1';
 
 let deps = null;
 
@@ -440,7 +440,7 @@ function renderResult(params = {}) {
 }
 
 function renderSettings() {
-  const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8, questionCount: 10 };
+  const s = deps.state.settings || { a4: 442, noteStyle: 'doremi', volume: 0.8, questionCount: 5 };
   const top = el('div', { class: 'top-row' }, [
     iconButton('back', tap(() => nav.show('home')), { label: '戻る' }),
     el('div', { class: 'screen-title' }, '設定'),
@@ -474,7 +474,7 @@ function renderSettings() {
   const questionBlock = chipRow(
     '問題数',
     QUESTION_COUNTS.map((n) => ({ label: `${n}問`, value: n })),
-    s.questionCount ?? 10,
+    s.questionCount ?? 5,
     (v) => {
       s.questionCount = v;
       deps.onSettingsChange?.({ questionCount: v });

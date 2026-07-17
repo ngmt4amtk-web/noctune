@@ -1,7 +1,7 @@
 // 進捗管理 v3: ベスト記録のみ（連続記録UIなし）
 
 const STORAGE_KEY = 'noctune-v1';
-const STATE_VERSION = 3;
+const STATE_VERSION = 4;
 
 const MODE_IDS = ['oto-ate', 'chord-ate', 'micro-ear', 'hamori'];
 
@@ -12,7 +12,7 @@ function defaultState() {
       a4: 442,
       noteStyle: 'doremi',
       volume: 0.8,
-      questionCount: 10,
+      questionCount: 5,
     },
     records: {},
     played: {},
@@ -43,9 +43,12 @@ export function loadState() {
   if (raw.played && typeof raw.played === 'object') {
     for (const id of MODE_IDS) if (Number.isFinite(raw.played[id])) played[id] = raw.played[id];
   }
+  const settings = raw.settings && typeof raw.settings === 'object' ? { ...raw.settings } : {};
+  // v4: 既定の問題数を10→5に変更。旧版が保存した旧既定値10だけ新既定に落とす（20など明示選択は保持）
+  if ((Number(raw.version) || 0) < 4 && settings.questionCount === 10) delete settings.questionCount;
   return {
     version: STATE_VERSION,
-    settings: { ...base.settings, ...(raw.settings || {}) },
+    settings: { ...base.settings, ...settings },
     records,
     played,
     lastConfig: raw.lastConfig && typeof raw.lastConfig === 'object' ? { ...raw.lastConfig } : {},

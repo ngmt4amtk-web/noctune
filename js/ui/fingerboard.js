@@ -1,6 +1,6 @@
 // 指板コンポーネント（I-06）。SVGで第1ポジションの指板を描き、タップで回答する。
 // theory.js の STRINGS / positionsForString に依存。スタイルはSVG内<style>で完結させる。
-import { STRINGS, positionsForString } from '../theory.js?v=0713a4';
+import { STRINGS, positionsForString } from '../theory.js?v=0718a1';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const SEMI_COUNT = 8; // 開放(0)〜semi7

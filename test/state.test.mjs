@@ -12,17 +12,47 @@ function freshStorage() {
 
 const mod = () => import(`./../js/state.js?t=${Date.now()}-${Math.random()}`);
 
-test('初期状態 v3・records空', async () => {
+test('初期状態 v4・records空・既定5問', async () => {
   freshStorage();
   globalThis.localStorage.setItem('noctune-v1', '{{{broken');
   const { loadState } = await mod();
   const s = loadState();
-  assert.equal(s.version, 3);
+  assert.equal(s.version, 4);
   assert.deepEqual(s.records, {});
   assert.equal(s.settings.a4, 442);
-  assert.equal(s.settings.questionCount, 10);
+  assert.equal(s.settings.questionCount, 5);
   assert.equal(s.settings.titleId, undefined);
   assert.equal(s.streak, undefined);
+});
+
+test('v4移行: 旧既定の10問は5問へ、明示選択の20問は保持', async () => {
+  freshStorage();
+  globalThis.localStorage.setItem(
+    'noctune-v1',
+    JSON.stringify({ version: 3, settings: { a4: 440, questionCount: 10 } })
+  );
+  const { loadState } = await mod();
+  let s = loadState();
+  assert.equal(s.settings.questionCount, 5);
+  assert.equal(s.settings.a4, 440);
+
+  globalThis.localStorage.setItem(
+    'noctune-v1',
+    JSON.stringify({ version: 3, settings: { questionCount: 20 } })
+  );
+  s = loadState();
+  assert.equal(s.settings.questionCount, 20);
+});
+
+test('v4以降で選び直した10問は保持', async () => {
+  freshStorage();
+  globalThis.localStorage.setItem(
+    'noctune-v1',
+    JSON.stringify({ version: 4, settings: { questionCount: 10 } })
+  );
+  const { loadState } = await mod();
+  const s = loadState();
+  assert.equal(s.settings.questionCount, 10);
 });
 
 test('旧データのxp/streakは読み捨て、recordsは残す', async () => {

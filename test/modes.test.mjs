@@ -79,7 +79,30 @@ test('設定の問題数が全モードに効く', () => {
     const round20 = mode.createRound({}, makeRng(1), { settings: { questionCount: 20 } });
     assert.equal(round20.total, 20);
     const roundDef = mode.createRound({}, makeRng(1), { settings: {} });
-    assert.equal(roundDef.total, 10);
+    assert.equal(roundDef.total, 5);
+  }
+});
+
+test('音当て: 全問 untilCorrect（正解を押すまで進まない）', () => {
+  const oto = MODES.find((m) => m.id === 'oto-ate');
+  const round = oto.createRound({ range: 'mid' }, makeRng(7), {
+    settings: { questionCount: 5, noteStyle: 'doremi' },
+  });
+  let q = round.next(null);
+  let n = 0;
+  while (q) {
+    n++;
+    assert.equal(q.untilCorrect, true);
+    q = round.next(true);
+  }
+  assert.equal(n, 5);
+});
+
+test('他モードは untilCorrect を持たない', () => {
+  for (const mode of MODES) {
+    if (mode.id === 'oto-ate') continue;
+    const q = mode.createRound({}, makeRng(2), { settings: { questionCount: 5 } }).next(null);
+    assert.equal(q.untilCorrect, undefined);
   }
 });
 

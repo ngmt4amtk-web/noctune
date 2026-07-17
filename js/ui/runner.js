@@ -1,9 +1,9 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0713a4';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0713a4';
-import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0713a4';
-import { createFingerboard } from './fingerboard.js?v=0713a4';
-import { scoreFor, makeRng } from '../engine.js?v=0713a4';
+import { freqOfMidi, detune } from '../theory.js?v=0718a1';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0718a1';
+import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0718a1';
+import { createFingerboard } from './fingerboard.js?v=0718a1';
+import { scoreFor, makeRng } from '../engine.js?v=0718a1';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;
@@ -184,12 +184,29 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       };
 
       if (q.input && q.input.kind === 'buttons') {
-        answerArea.append(
-          answerGrid(q.input.options, (val, idx) => {
-            const label = typeof q.input.options[idx] === 'string' ? q.input.options[idx] : q.input.options[idx]?.label;
-            done({ kind: 'buttons', index: idx, value: val, label });
-          })
-        );
+        // untilCorrect: 誤答は潰して継続、正解を押すまで進まない。採点は最初のタップ
+        let firstResponse = null;
+        const grid = answerGrid(q.input.options, (val, idx) => {
+          const label = typeof q.input.options[idx] === 'string' ? q.input.options[idx] : q.input.options[idx]?.label;
+          const response = { kind: 'buttons', index: idx, value: val, label };
+          if (q.untilCorrect && idx !== q.input.correct) {
+            if (!firstResponse) firstResponse = response;
+            const btn = grid.querySelector(`button[data-index="${idx}"]`);
+            if (btn) {
+              btn.disabled = true;
+              btn.classList.add('is-wrong');
+              shake && shake(btn);
+            }
+            synth.playFx && synth.playFx('wrong');
+            return;
+          }
+          if (q.untilCorrect) {
+            const btn = grid.querySelector(`button[data-index="${idx}"]`);
+            if (btn) btn.classList.add('is-correct');
+          }
+          done(firstResponse || response);
+        });
+        answerArea.append(grid);
       } else if (q.input && q.input.kind === 'pitch-set') {
         answerArea.append(pitchSetPicker(q.input, (res) => done(res)));
       } else if (q.input && q.input.kind === 'fingerboard') {
@@ -300,8 +317,11 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       streak = 0;
       feedbackEl.textContent = q.explain ? `不正解 — ${q.explain}` : '不正解';
       feedbackEl.classList.add('is-wrong');
-      synth.playFx && synth.playFx('wrong');
-      shake && shake(stage);
+      // untilCorrect は誤答タップごとに鳴らし済み。正解到達の瞬間に再びブザーを鳴らさない
+      if (!q.untilCorrect) {
+        synth.playFx && synth.playFx('wrong');
+        shake && shake(stage);
+      }
     }
     h.update({ current: asked, total, score, combo: streak });
     await sleep(q.explain ? FEEDBACK_MS_LONG : FEEDBACK_MS);

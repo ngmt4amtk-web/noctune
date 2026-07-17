@@ -6,7 +6,7 @@ export const APP_ICON = 'assets/icons/noctune-icon-fork.png';
 
 /** Allowed question counts in settings (shared). */
 export const QUESTION_COUNTS = [5, 10, 20];
-export const DEFAULT_QUESTION_COUNT = 10;
+export const DEFAULT_QUESTION_COUNT = 5;
 
 export function resolveQuestionCount(settings = {}) {
   const n = Number(settings.questionCount);
