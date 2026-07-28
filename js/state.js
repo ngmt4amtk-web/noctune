@@ -1,7 +1,7 @@
 // 進捗管理 v3: ベスト記録のみ（連続記録UIなし）
 
 const STORAGE_KEY = 'noctune-v1';
-const STATE_VERSION = 4;
+const STATE_VERSION = 5;
 
 const MODE_IDS = ['oto-ate', 'chord-ate', 'micro-ear', 'hamori'];
 
@@ -17,6 +17,7 @@ function defaultState() {
     records: {},
     played: {},
     lastConfig: {},
+    progress: {},
   };
 }
 
@@ -29,10 +30,13 @@ export function loadState() {
   }
   const base = defaultState();
   if (!raw || typeof raw !== 'object') return base;
+  const rawVersion = Number(raw.version) || 0;
 
   const records = {};
   if (raw.records && typeof raw.records === 'object') {
     for (const id of MODE_IDS) {
+      // v5で音当ての課題と採点対象が変わったため、旧ベストは比較不能
+      if (rawVersion < 5 && id === 'oto-ate') continue;
       const r = raw.records[id];
       if (!r || typeof r !== 'object') continue;
       records[id] = {};
@@ -45,13 +49,19 @@ export function loadState() {
   }
   const settings = raw.settings && typeof raw.settings === 'object' ? { ...raw.settings } : {};
   // v4: 既定の問題数を10→5に変更。旧版が保存した旧既定値10だけ新既定に落とす（20など明示選択は保持）
-  if ((Number(raw.version) || 0) < 4 && settings.questionCount === 10) delete settings.questionCount;
+  if (rawVersion < 4 && settings.questionCount === 10) delete settings.questionCount;
+  const progress = {};
+  const otoProgress = raw.progress?.['oto-ate'];
+  if (otoProgress && Number.isFinite(otoProgress.autoLevel)) {
+    progress['oto-ate'] = { autoLevel: Math.min(4, Math.max(0, Math.round(otoProgress.autoLevel))) };
+  }
   return {
     version: STATE_VERSION,
     settings: { ...base.settings, ...settings },
     records,
     played,
     lastConfig: raw.lastConfig && typeof raw.lastConfig === 'object' ? { ...raw.lastConfig } : {},
+    progress,
   };
 }
 

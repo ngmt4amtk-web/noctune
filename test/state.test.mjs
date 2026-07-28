@@ -12,13 +12,14 @@ function freshStorage() {
 
 const mod = () => import(`./../js/state.js?t=${Date.now()}-${Math.random()}`);
 
-test('初期状態 v4・records空・既定5問', async () => {
+test('初期状態 v5・records/進捗空・既定5問', async () => {
   freshStorage();
   globalThis.localStorage.setItem('noctune-v1', '{{{broken');
   const { loadState } = await mod();
   const s = loadState();
-  assert.equal(s.version, 4);
+  assert.equal(s.version, 5);
   assert.deepEqual(s.records, {});
+  assert.deepEqual(s.progress, {});
   assert.equal(s.settings.a4, 442);
   assert.equal(s.settings.questionCount, 5);
   assert.equal(s.settings.titleId, undefined);
@@ -55,7 +56,18 @@ test('v4以降で選び直した10問は保持', async () => {
   assert.equal(s.settings.questionCount, 10);
 });
 
-test('旧データのxp/streakは読み捨て、recordsは残す', async () => {
+test('相対音感のおまかせ段階を復元し範囲外は丸める', async () => {
+  freshStorage();
+  globalThis.localStorage.setItem(
+    'noctune-v1',
+    JSON.stringify({ version: 5, progress: { 'oto-ate': { autoLevel: 99 } } })
+  );
+  const { loadState } = await mod();
+  const s = loadState();
+  assert.deepEqual(s.progress['oto-ate'], { autoLevel: 4 });
+});
+
+test('旧データのxp/streakと旧音当て記録は読み捨て、他モード記録は残す', async () => {
   freshStorage();
   globalThis.localStorage.setItem(
     'noctune-v1',
@@ -63,13 +75,17 @@ test('旧データのxp/streakは読み捨て、recordsは残す', async () => {
       version: 2,
       xp: 999,
       streak: { last: '2026-07-11', count: 4 },
-      records: { 'oto-ate': { 'range=mid': 0.8 } },
+      records: {
+        'oto-ate': { 'range=mid': 0.8 },
+        'chord-ate': { 'size=2': 0.7 },
+      },
       settings: { a4: 440 },
     })
   );
   const { loadState } = await mod();
   const s = loadState();
-  assert.equal(s.records['oto-ate']['range=mid'], 0.8);
+  assert.equal(s.records['oto-ate'], undefined);
+  assert.equal(s.records['chord-ate']['size=2'], 0.7);
   assert.equal(s.settings.a4, 440);
   assert.equal(s.xp, undefined);
   assert.equal(s.streak, undefined);

@@ -1,8 +1,8 @@
-import { loadState, saveState, recordResult, configKeyOf } from './state.js?v=0718a1';
-import { Synth, unlockOnFirstGesture } from './audio.js?v=0718a1';
-import { runRound } from './ui/runner.js?v=0718a1';
-import { nav } from './ui/screens.js?v=0718a1';
-import { MODES } from './modes/registry.js?v=0718a1';
+import { loadState, saveState, recordResult, configKeyOf } from './state.js?v=0728a1';
+import { Synth, unlockOnFirstGesture } from './audio.js?v=0728a1';
+import { runRound } from './ui/runner.js?v=0728a1';
+import { nav } from './ui/screens.js?v=0728a1';
+import { MODES } from './modes/registry.js?v=0728a1';
 
 const state = loadState();
 const synth = new Synth();
@@ -26,6 +26,7 @@ async function startPlay(params = {}) {
     return;
   }
   const config = params.config || state.lastConfig?.[mode.id] || defaultConfig(mode);
+  mode.normalizeConfig?.(config);
   state.lastConfig[mode.id] = { ...config };
   saveState(state);
 
@@ -42,6 +43,7 @@ async function startPlay(params = {}) {
     synth,
     container,
     settings: state.settings,
+    progress: state.progress?.[mode.id] || {},
     onFinish: (result) => onRoundComplete(result, mode, config),
   });
 }
@@ -52,6 +54,7 @@ function onRoundComplete(result, mode, config) {
     origShow('home');
     return;
   }
+  mode.updateProgress?.({ summary: result.summary, state, config });
   const rec = typeof mode.record === 'function' ? mode.record(result.summary) : null;
   const diff = recordResult(state, mode.id, configKeyOf(config), {
     record: rec,

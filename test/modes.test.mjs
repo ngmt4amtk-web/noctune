@@ -5,6 +5,7 @@ import chordAte from '../js/modes/chord-ate.js';
 import { makeRng } from '../js/engine.js';
 
 const QUALITY_WORDS = ['メジャー', '短3度', '長三和音', '短三和音', '減三和音', 'sus4'];
+const oto = MODES.find((mode) => mode.id === 'oto-ate');
 
 test('registry順と表示名', () => {
   assert.deepEqual(
@@ -19,57 +20,97 @@ test('全モードが画像アイコンを持つ', () => {
   }
 });
 
-test('音当て: 記号なしは白鍵のみ・7択', () => {
-  const oto = MODES.find((m) => m.id === 'oto-ate');
-  const WHITE = [0, 2, 4, 5, 7, 9, 11];
-  const round = oto.createRound({ accidental: 'none', range: 'mid' }, makeRng(4), {
-    settings: { questionCount: 10, noteStyle: 'doremi' },
-  });
-  assert.equal(round.total, 10);
-  let q = round.next(null);
-  for (let i = 0; i < 10 && q; i++) {
-    assert.equal(q.input.options.length, 7);
-    assert.ok(WHITE.includes(q.detail.targetPc));
-    const joined = q.input.options.join('');
-    assert.equal(joined.includes('♯'), false);
-    assert.equal(joined.includes('♭'), false);
-    assert.ok(q.input.correct >= 0 && q.input.correct < 7);
-    assert.equal(q.input.options[q.input.correct], q.explain.match(/「(.+)」/)[1]);
-    q = round.next(true);
+test('音当て: 最初は基準との高低を3択で聴く', () => {
+  const q = oto
+    .createRound({ stage: 'direction', accidental: 'none' }, makeRng(4), {
+      settings: { questionCount: 5, noteStyle: 'doremi' },
+    })
+    .next(null);
+  assert.deepEqual(q.input.options, ['低い', '同じ', '高い']);
+  assert.equal(q.play.filter((step) => step.type === 'note').length, 2);
+  assert.ok(q.guidePlay.length >= 3);
+  assert.equal(q.untilCorrect, true);
+  assert.equal(q.assistanceCountsAsMiss, true);
+});
+
+test('音当て: 3音→5音→7音は調性文脈と段階別の選択肢を持つ', () => {
+  const stages = [
+    ['triad', 3],
+    ['penta', 5],
+    ['diatonic', 7],
+  ];
+  for (const [stage, count] of stages) {
+    const q = oto
+      .createRound({ stage, accidental: 'none' }, makeRng(5), {
+        settings: { questionCount: 5, noteStyle: 'doremi' },
+      })
+      .next(null);
+    assert.equal(q.input.options.length, count);
+    assert.equal(q.play[0].type, 'chord');
+    assert.equal(q.play.filter((step) => step.type === 'chord').length, 4);
+    assert.equal(q.play.at(-1).type, 'note');
+    assert.equal(q.input.options[q.input.correct].value, q.detail.targetPc);
+    assert.equal(q.input.options.some((opt) => /[♯♭]/.test(opt.label)), false);
+    assert.match(q.context, /^主音 /);
+    assert.ok(q.hint.includes(q.input.options[q.input.correct].label));
   }
 });
 
-test('音当て: フラットありは♭表記・♯なし', () => {
-  const oto = MODES.find((m) => m.id === 'oto-ate');
-  const round = oto.createRound({ accidental: 'flat', range: 'mid' }, makeRng(5), {
-    settings: { questionCount: 10, noteStyle: 'abc' },
-  });
-  let q = round.next(null);
-  for (let i = 0; i < 10 && q; i++) {
-    assert.equal(q.input.options.length, 12);
-    const joined = q.input.options.join('');
-    assert.ok(joined.includes('♭'));
-    assert.equal(joined.includes('♯'), false);
-    assert.ok(q.input.correct >= 0 && q.input.correct < 12);
-    assert.equal(q.input.options[q.input.correct], q.explain.match(/「(.+)」/)[1]);
-    assert.equal(q.detail.targetPc, q.input.correct);
-    q = round.next(true);
-  }
-  const first = oto.createRound({ accidental: 'flat', range: 'mid' }, makeRng(5), {
-    settings: { questionCount: 1, noteStyle: 'abc' },
-  }).next(null);
-  assert.deepEqual(first.input.options.slice(0, 3), ['C', 'D♭', 'D']);
+test('音当て: 12音は基準音との関係・選択表記・ガイドを持つ', () => {
+  const flat = oto
+    .createRound({ stage: 'chromatic', accidental: 'flat' }, makeRng(6), {
+      settings: { questionCount: 5, noteStyle: 'abc' },
+    })
+    .next(null);
+  assert.equal(flat.input.options.length, 12);
+  assert.deepEqual(
+    flat.input.options.slice(0, 3).map((option) => option.label),
+    ['C', 'D♭', 'D']
+  );
+  assert.equal(flat.input.options.map((option) => option.label).join('').includes('♯'), false);
+  assert.equal(flat.input.correct, flat.detail.targetPc);
+  assert.equal(flat.play.filter((step) => step.type === 'note').length, 2);
+  assert.ok(flat.guidePlay.length >= 3);
+
+  const sharp = oto
+    .createRound({ stage: 'chromatic', accidental: 'sharp' }, makeRng(7), {
+      settings: { questionCount: 5, noteStyle: 'doremi' },
+    })
+    .next(null);
+  assert.ok(sharp.input.options.map((option) => option.label).join('').includes('♯'));
+  assert.equal(sharp.detail.accidental, 'sharp');
 });
 
-test('音当て: シャープありは既定どおり♯', () => {
-  const oto = MODES.find((m) => m.id === 'oto-ate');
-  const round = oto.createRound({ range: 'mid' }, makeRng(6), {
-    settings: { questionCount: 3, noteStyle: 'doremi' },
+test('音当て: 白鍵のみでは12音を選んでも7音へ安全に丸める', () => {
+  const q = oto
+    .createRound({ stage: 'chromatic', accidental: 'none' }, makeRng(8), {
+      settings: { questionCount: 5, noteStyle: 'doremi' },
+    })
+    .next(null);
+  assert.equal(q.detail.stageId, 'diatonic');
+  assert.equal(q.input.options.length, 7);
+});
+
+test('音当て: おまかせは正解で段階を上げ、誤答で一段戻す', () => {
+  const round = oto.createRound({ stage: 'auto', accidental: 'sharp' }, makeRng(9), {
+    settings: { questionCount: 5, noteStyle: 'doremi' },
+    progress: { autoLevel: 0 },
   });
-  const q = round.next(null);
-  assert.equal(q.input.options.length, 12);
-  assert.ok(q.input.options.join('').includes('♯'));
-  assert.equal(q.detail.accidental, 'sharp');
+  const q1 = round.next(null);
+  const q2 = round.next(true);
+  const q3 = round.next(true);
+  const q4 = round.next(true);
+  const q5 = round.next(false);
+  assert.equal(q1.detail.stageId, 'direction');
+  assert.equal(q2.detail.stageId, 'triad');
+  assert.equal(q3.detail.stageId, 'triad');
+  assert.equal(q4.detail.stageId, 'penta');
+  assert.equal(q5.detail.stageId, 'triad');
+  assert.equal(round.next(true), null);
+  const summary = round.summary();
+  assert.equal(summary.adaptive, true);
+  assert.equal(summary.accuracy, 4 / 5);
+  assert.equal(summary.autoLevelEnd, 1);
 });
 
 test('設定の問題数が全モードに効く', () => {
@@ -84,8 +125,7 @@ test('設定の問題数が全モードに効く', () => {
 });
 
 test('音当て: 全問 untilCorrect（正解を押すまで進まない）', () => {
-  const oto = MODES.find((m) => m.id === 'oto-ate');
-  const round = oto.createRound({ range: 'mid' }, makeRng(7), {
+  const round = oto.createRound({ stage: 'diatonic', accidental: 'none' }, makeRng(7), {
     settings: { questionCount: 5, noteStyle: 'doremi' },
   });
   let q = round.next(null);

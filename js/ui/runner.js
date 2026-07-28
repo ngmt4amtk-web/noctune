@@ -1,18 +1,18 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0718a1';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0718a1';
-import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0718a1';
-import { createFingerboard } from './fingerboard.js?v=0718a1';
-import { scoreFor, makeRng } from '../engine.js?v=0718a1';
+import { freqOfMidi, detune } from '../theory.js?v=0728a1';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0728a1';
+import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0728a1';
+import { createFingerboard } from './fingerboard.js?v=0728a1';
+import { scoreFor, makeRng } from '../engine.js?v=0728a1';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;
 
-export async function runRound({ mode, config, synth, container, settings = {}, onFinish }) {
+export async function runRound({ mode, config, synth, container, settings = {}, progress = {}, onFinish }) {
   const a4 = settings.a4 || 442;
   const seed = (settings.seed ?? Date.now()) >>> 0;
   const rng = makeRng(seed);
-  const round = mode.createRound(config, rng, { settings });
+  const round = mode.createRound(config, rng, { settings, progress });
   const total = round.total;
 
   let asked = 0;
@@ -29,6 +29,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   root.style.setProperty('--mode-color', mode.color || '#6ec8ff');
   const h = hud({ progress: 0, total, score: 0, combo: 0 });
   const stage = el('div', 'runner-stage');
+  const contextEl = el('div', 'runner-context');
   const promptEl = el('div', 'runner-prompt');
   const playWrap = el('div', 'runner-play-wrap');
   const playBtn = el('button', 'runner-play');
@@ -36,11 +37,14 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   playWrap.append(playBtn);
   const timerBar = el('div', 'runner-timer');
   timerBar.style.display = 'none';
-  const answerArea = el('div', 'runner-answer');
+  const transportRow = el('div', 'runner-transport');
   const replayBtn = el('button', 'runner-replay');
-  replayBtn.textContent = 'もう一度';
+  const guideBtn = el('button', 'runner-guide');
+  transportRow.append(replayBtn, guideBtn);
+  const hintEl = el('div', 'runner-hint');
+  const answerArea = el('div', 'runner-answer');
   const feedbackEl = el('div', 'runner-feedback');
-  stage.append(promptEl, playWrap, timerBar, answerArea, replayBtn, feedbackEl);
+  stage.append(contextEl, promptEl, playWrap, timerBar, transportRow, hintEl, answerArea, feedbackEl);
   root.append(h.el, stage);
   container.append(root);
 
@@ -96,6 +100,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   function setTransportEnabled(on) {
     playBtn.disabled = !on;
     replayBtn.disabled = !on;
+    guideBtn.disabled = !on;
   }
 
   function expectedRecord(q) {
@@ -123,6 +128,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   function gradeAnswer(q, response) {
     if (typeof q.grade === 'function') return !!q.grade(response);
     if (!response) return false;
+    if (q.assistanceCountsAsMiss && response.assisted) return false;
     if (q.input?.kind === 'pitch-set') {
       const a = [...(response.pcs || [])].sort((x, y) => x - y);
       const b = [...(q.input.correctPcs || [])].sort((x, y) => x - y);
@@ -136,12 +142,18 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
     return new Promise((resolve) => {
       asked++;
       promptEl.textContent = q.prompt || '';
+      contextEl.textContent = q.context || '';
+      contextEl.style.display = q.context ? '' : 'none';
       feedbackEl.textContent = '';
       feedbackEl.className = 'runner-feedback';
+      hintEl.textContent = '';
+      hintEl.className = 'runner-hint';
+      hintEl.style.display = 'none';
       answerArea.innerHTML = '';
       h.update({ current: asked, total, score, combo: streak });
 
       let answered = false;
+      let assisted = false;
       let timer = null;
       let raf = null;
       let visCleanup = null;
@@ -180,7 +192,14 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
           explain: q.explain || '',
           detail: q.detail || { modeId: mode.id },
         });
-        handleResult(q, correct).then(() => resolve(correct));
+        handleResult(q, correct, response).then(() => resolve(correct));
+      };
+
+      const revealHint = () => {
+        if (!q.hint) return;
+        hintEl.textContent = q.hint;
+        hintEl.style.display = '';
+        hintEl.classList.add('is-visible');
       };
 
       if (q.input && q.input.kind === 'buttons') {
@@ -198,13 +217,19 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
               shake && shake(btn);
             }
             synth.playFx && synth.playFx('wrong');
+            revealHint();
+            guideBtn.classList.add('is-recommended');
             return;
           }
           if (q.untilCorrect) {
             const btn = grid.querySelector(`button[data-index="${idx}"]`);
             if (btn) btn.classList.add('is-correct');
           }
-          done(firstResponse || response);
+          if (firstResponse) {
+            done({ ...firstResponse, corrected: true, assisted });
+          } else {
+            done({ ...response, corrected: assisted, assisted });
+          }
         });
         answerArea.append(grid);
       } else if (q.input && q.input.kind === 'pitch-set') {
@@ -215,29 +240,45 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
 
       setAnswerEnabled(true);
 
-      const doPlay = async () => {
+      const playTransport = async (steps, source = 'replay') => {
         const epoch = ++playEpoch;
         synth.stopAll();
         setTransportEnabled(false);
-        playBtn.classList.add('is-playing');
+        const sourceButton = source === 'guide' ? guideBtn : playBtn;
+        sourceButton.classList.add('is-playing');
         const voices =
-          q.play?.[0]?.type === 'chord'
-            ? (q.play[0].notes || []).length
-            : q.play?.[0]?.type === 'double'
+          steps?.[0]?.type === 'chord'
+            ? (steps[0].notes || []).length
+            : steps?.[0]?.type === 'double'
             ? 2
             : 1;
-        listenRipple(playBtn, voices);
+        if (source !== 'guide') listenRipple(playBtn, voices);
         try {
-          await playSteps(q.play, () => stillLive(epoch, answered));
+          await playSteps(steps, () => stillLive(epoch, answered));
         } finally {
-          playBtn.classList.remove('is-playing');
+          sourceButton.classList.remove('is-playing');
           if (stillLive(epoch, answered)) setTransportEnabled(true);
         }
       };
 
+      const doPlay = () => playTransport(q.play, 'replay');
+      const doGuidePlay = () => {
+        if (!q.guidePlay || answered || aborted) return Promise.resolve();
+        assisted = true;
+        revealHint();
+        guideBtn.classList.remove('is-recommended');
+        return playTransport(q.guidePlay, 'guide');
+      };
+
       playBtn.onclick = doPlay;
+      replayBtn.textContent = q.replayLabel || 'もう一度';
       replayBtn.style.display = q.replay === false ? 'none' : '';
       replayBtn.onclick = doPlay;
+      guideBtn.textContent = q.guideLabel || '音の道すじ';
+      guideBtn.className = 'runner-guide';
+      guideBtn.style.display = q.guidePlay ? '' : 'none';
+      guideBtn.onclick = doGuidePlay;
+      transportRow.classList.toggle('has-guide', !!q.guidePlay);
 
       doPlay().then(() => {
         if (aborted) {
@@ -303,13 +344,20 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
     if (anchor) fb.highlight([anchor], 'anchor');
   }
 
-  async function handleResult(q, correct) {
+  async function handleResult(q, correct, response) {
     if (correct) {
       correctCount++;
       streak++;
       score += scoreFor({ correct: true, streakNow: streak });
       feedbackEl.textContent = q.explain ? `正解 — ${q.explain}` : '正解';
       feedbackEl.classList.add('is-correct');
+      synth.playFx && synth.playFx('correct');
+      pop && pop(feedbackEl);
+      clearFlash(stage);
+    } else if (q.untilCorrect && (response?.corrected || response?.assisted)) {
+      streak = 0;
+      feedbackEl.textContent = q.explain ? `確認できた — ${q.explain}` : '確認できた';
+      feedbackEl.classList.add('is-coached');
       synth.playFx && synth.playFx('correct');
       pop && pop(feedbackEl);
       clearFlash(stage);

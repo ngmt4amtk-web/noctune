@@ -1,9 +1,9 @@
 // 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
-import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0718a1';
-import { iconEl } from './icons.js?v=0718a1';
-import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0718a1';
-import { freqOfMidi, detune } from '../theory.js?v=0718a1';
-import { isImageIcon } from './icons.js?v=0718a1';
+import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0728a1';
+import { iconEl } from './icons.js?v=0728a1';
+import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0728a1';
+import { freqOfMidi, detune } from '../theory.js?v=0728a1';
+import { isImageIcon } from './icons.js?v=0728a1';
 
 let deps = null;
 
@@ -73,6 +73,7 @@ function resolvedConfig(mode) {
   }
   // 和声的時は size を強制3
   if (mode.id === 'chord-ate' && config.gen !== 'free') config.size = 3;
+  mode.normalizeConfig?.(config);
   return config;
 }
 
@@ -113,6 +114,8 @@ function answerLabel(rec) {
 function insightFromLog(modeId, log) {
   if (!Array.isArray(log) || !log.length) return null;
   if (modeId === 'oto-ate') {
+    const firstTry = log.filter((row) => row.correct).length;
+    const coached = log.filter((row) => !row.correct && (row.response?.corrected || row.response?.assisted)).length;
     const miss = {};
     for (const row of log) {
       if (row.correct) continue;
@@ -120,8 +123,12 @@ function insightFromLog(modeId, log) {
       if (name) miss[name] = (miss[name] || 0) + 1;
     }
     const entries = Object.entries(miss).sort((a, b) => b[1] - a[1]);
-    if (!entries.length) return '全音名を安定して当てられた';
-    return `落としやすい音: ${entries.slice(0, 3).map(([n, c]) => `${n}×${c}`).join(' / ')}`;
+    const recovered = coached ? `・${coached}問は道すじで確認` : '';
+    if (!entries.length) return `全${log.length}問をヒントなしで正解`;
+    return `自力で ${firstTry}/${log.length}問${recovered}。次に聴きたい音: ${entries
+      .slice(0, 3)
+      .map(([name, count]) => `${name}×${count}`)
+      .join(' / ')}`;
   }
   if (modeId === 'chord-ate') {
     let hit = 0;
@@ -250,6 +257,7 @@ function renderSetup(params = {}) {
   const pick = (key, value) => {
     config[key] = value;
     if (key === 'gen' && value === 'harmonic') config.size = 3;
+    mode.normalizeConfig?.(config);
     rememberConfig(modeId, config);
     deps.synth?.ensureRunning?.();
     deps.synth?.playFx?.('select');
@@ -398,11 +406,19 @@ function renderResult(params = {}) {
   for (const row of log) {
     const expected = answerLabel(row.expected);
     const got = answerLabel(row.response);
+    const coached = !row.correct && (row.response?.corrected || row.response?.assisted);
+    const responseText = row.correct
+      ? '自力で正解'
+      : coached
+      ? row.response?.assisted && row.response?.index === row.expected?.index
+        ? '道すじで確認'
+        : `最初 ${got}・確認済み`
+      : `回答 ${got}`;
     list.appendChild(
       el(
         'button',
         {
-          class: `log-row shear ${row.correct ? 'is-ok' : 'is-ng'}`,
+          class: `log-row shear ${row.correct ? 'is-ok' : coached ? 'is-coached' : 'is-ng'}`,
           type: 'button',
           onclick: () => {
             deps.synth?.ensureRunning?.();
@@ -412,10 +428,10 @@ function renderResult(params = {}) {
         },
         [
           el('div', { class: 'log-no' }, String(row.no).padStart(2, '0')),
-          el('div', { class: 'log-mark' }, row.correct ? iconEl('ok', { size: 14 }) : iconEl('ng', { size: 14 })),
+          el('div', { class: 'log-mark' }, row.correct || coached ? iconEl('ok', { size: 14 }) : iconEl('ng', { size: 14 })),
           el('div', { class: 'log-body' }, [
             el('div', { class: 'log-expected' }, expected),
-            el('div', { class: 'log-response' }, row.correct ? '正解' : `回答 ${got}`),
+            el('div', { class: 'log-response' }, responseText),
           ]),
           el('div', { class: 'log-play' }, iconEl('play', { size: 14 })),
         ]
