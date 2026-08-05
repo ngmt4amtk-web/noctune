@@ -1,7 +1,7 @@
 // 音当て: 開放弦を基準に、バイオリン第1ポジションの音名を当てる練習
-import { noteNamesFor, STRINGS, positionsForString, WHITE_PCS } from '../theory.js?v=0805b1';
-import { resolveQuestionCount } from '../identity.js?v=0805b1';
-import { shuffle } from '../engine.js?v=0805b1';
+import { noteNamesFor, STRINGS, positionsForString, WHITE_PCS } from '../theory.js?v=0805c1';
+import { resolveQuestionCount } from '../identity.js?v=0805c1';
+import { shuffle } from '../engine.js?v=0805c1';
 
 export const RANGE_OPTIONS = [
   {
@@ -33,6 +33,9 @@ const VALID_TONES = new Set(['white', 'sharp', 'flat']);
 const VALID_OPEN = new Set(['on', 'off']);
 
 export const CALIBRATION_MIDIS = [55, 62, 69, 76];
+export const CALIBRATION_CUES = ['ソ', 'レ', 'ラ', 'ミ'];
+export const READY_CUE = 'START!';
+export const READY_HOLD_SECONDS = 0.48;
 
 function pcOf(midi) {
   return ((midi % 12) + 12) % 12;
@@ -128,12 +131,12 @@ export function createTargetDeck(pool, rng) {
   };
 }
 
-function note(midi, dur) {
-  return { type: 'note', midi, dur };
+function note(midi, dur, extra) {
+  return extra ? { type: 'note', midi, dur, ...extra } : { type: 'note', midi, dur };
 }
 
-function gap(dur) {
-  return { type: 'gap', dur };
+function gap(dur, extra) {
+  return extra ? { type: 'gap', dur, ...extra } : { type: 'gap', dur };
 }
 
 function anchorTargetPlay(anchorMidi, targetMidi) {
@@ -147,11 +150,11 @@ function targetOnlyPlay(targetMidi) {
 function calibrationPlay() {
   const steps = [];
   for (let i = 0; i < CALIBRATION_MIDIS.length; i++) {
-    steps.push(note(CALIBRATION_MIDIS[i], 0.42));
+    steps.push(note(CALIBRATION_MIDIS[i], 0.42, { cue: CALIBRATION_CUES[i] }));
     if (i < CALIBRATION_MIDIS.length - 1) steps.push(gap(0.08));
   }
-  // 4音確認と第1問を聴覚的にひと続きにしない
-  steps.push(gap(0.32));
+  // ミのrelease完了後、短い無音の着地でready cueを読める時間だけ残す
+  steps.push(gap(READY_HOLD_SECONDS, { cue: READY_CUE, ready: true }));
   return steps;
 }
 
@@ -286,7 +289,6 @@ export default {
     return {
       total,
       intro: {
-        label: 'START',
         play: calibrationPlay(),
       },
       next(prevCorrect) {

@@ -6,6 +6,9 @@ import {
   RANGE_OPTIONS,
   STRING_NATURALS,
   CALIBRATION_MIDIS,
+  CALIBRATION_CUES,
+  READY_CUE,
+  READY_HOLD_SECONDS,
   mapTarget,
   createTargetDeck,
   resolveRange,
@@ -122,14 +125,31 @@ test('音当て: 白鍵／♯／♭のプール境界', () => {
   }
 });
 
-test('音当て: createRoundのintroはSTART用で第1問へ混入しない', () => {
+test('音当て: createRoundのintroはcue同期カウントインで第1問へ混入しない', () => {
   const round = oto.createRound({ range: 'violin', tones: 'white', openEach: 'on' }, makeRng(11), {
     settings: { questionCount: 3, noteStyle: 'doremi' },
   });
-  assert.equal(round.intro.label, 'START');
+  assert.equal(round.intro.label, undefined);
   assert.deepEqual(noteMidis(round.intro.play), CALIBRATION_MIDIS);
+  assert.deepEqual(
+    round.intro.play.filter((s) => s.type === 'note').map((s) => s.cue),
+    CALIBRATION_CUES
+  );
   assert.equal(round.intro.play.at(-1).type, 'gap');
-  assert.ok(round.intro.play.at(-1).dur >= 0.3);
+  assert.equal(round.intro.play.at(-1).dur, READY_HOLD_SECONDS);
+  assert.equal(round.intro.play.at(-1).cue, READY_CUE);
+  assert.equal(round.intro.play.at(-1).ready, true);
+  assert.equal(
+    round.intro.play.some((s) => s.type === 'note' && /START/.test(s.cue || '')),
+    false
+  );
+  // 音間gapは従来どおり3つ、START!用の末尾gapは1つだけ
+  const gaps = round.intro.play.filter((s) => s.type === 'gap');
+  assert.equal(gaps.length, 4);
+  assert.deepEqual(
+    gaps.map((g) => g.dur),
+    [0.08, 0.08, 0.08, READY_HOLD_SECONDS]
+  );
 
   const q1 = round.next(null);
   const notes1 = noteMidis(q1.play);
@@ -140,6 +160,33 @@ test('音当て: createRoundのintroはSTART用で第1問へ混入しない', ()
   const q2 = round.next(true);
   assert.deepEqual(noteMidis(q2.play), [q2.detail.anchorMidi, q2.detail.targetMidi]);
   assertCleanQuestion(q2);
+});
+
+test('音当て: runnerはstep開始callbackでcue更新し独立タイマー同期しない', () => {
+  const runnerSrc = readFileSync(join(ROOT, 'js/ui/runner.js'), 'utf8');
+  const cssSrc = readFileSync(join(ROOT, 'css/style.css'), 'utf8');
+  assert.match(runnerSrc, /onStepStart\?\.\(s\)/);
+  assert.match(runnerSrc, /if \(step\?\.cue\) showIntroCue\(step\.cue, step\.ready === true\)/);
+  assert.match(runnerSrc, /runner-intro-cue/);
+  assert.match(runnerSrc, /classList\.toggle\('is-ready'/);
+  assert.match(runnerSrc, /classList\.add\('is-enter'\)/);
+  // 導入cue用の独立setTimeout同期は持たない（sleepはgap再生用のみ）
+  assert.equal(/setTimeout\([^)]*cue|cue[^;]*setTimeout/i.test(runnerSrc), false);
+  assert.match(cssSrc, /\.runner-intro-cue\.is-ready/);
+  assert.match(cssSrc, /\.runner-intro-cue\.is-ready\.is-enter/);
+  assert.match(cssSrc, /\.runner-intro-cue\.is-enter/);
+  assert.match(cssSrc, /runner-intro-cue\.is-enter/);
+  assert.equal(cssSrc.includes('runner-intro-start'), false);
+  // 和名cueとSTART!で同じ過剰letter-spacingを使わない
+  assert.match(cssSrc, /\.runner-intro-cue \{[\s\S]*?letter-spacing:\s*0;/);
+  assert.match(cssSrc, /\.runner-intro-cue\.is-ready \{[\s\S]*?letter-spacing:\s*0\.06em;/);
+  const introCueBlock = cssSrc.match(/\.runner-intro-cue[\s\S]*?@keyframes intro-cue-enter/)?.[0] || '';
+  assert.equal(/letter-spacing:\s*0\.28em/.test(introCueBlock), false);
+  assert.equal(/text-indent:\s*0\.28em/.test(introCueBlock), false);
+  assert.match(
+    runnerSrc,
+    /if \(!container\.isConnected \|\| aborted \|\| introEpoch !== playEpoch\) return;[\s\S]*?synth\.stopAll/
+  );
 });
 
 test('音当て: 毎問開放弦OFFは出題targetのみ、誤答確認はanchor→target', () => {
@@ -330,7 +377,7 @@ test('音当て専用SFX名がaudioにあり、既存correct/wrong/fanfareを壊
   assert.match(cssSrc, /\.fx-reward-burst\.is-strong/);
 });
 
-test('キャッシュトークン0805b1が一貫', () => {
+test('キャッシュトークン0805c1が一貫', () => {
   const files = [
     'index.html',
     'js/asset-v.js',
@@ -343,10 +390,10 @@ test('キャッシュトークン0805b1が一貫', () => {
   ];
   for (const rel of files) {
     const src = readFileSync(join(ROOT, rel), 'utf8');
-    assert.equal(src.includes('0805a1'), false, rel);
-    assert.equal(src.includes('0805b1'), true, rel);
+    assert.equal(src.includes('0805b1'), false, rel);
+    assert.equal(src.includes('0805c1'), true, rel);
   }
-  assert.equal(readFileSync(join(ROOT, 'js/asset-v.js'), 'utf8').includes("ASSET_V = '0805b1'"), true);
+  assert.equal(readFileSync(join(ROOT, 'js/asset-v.js'), 'utf8').includes("ASSET_V = '0805c1'"), true);
 });
 
 test('設定の問題数が全モードに効く', () => {

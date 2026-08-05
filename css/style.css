@@ -428,14 +428,31 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--accent); }
   justify-content: center;
   padding: 24px 16px;
 }
-.runner-intro-start {
+.runner-intro-cue {
   color: #fff;
-  font-size: clamp(52px, 18vw, 96px);
+  font-size: clamp(64px, 22vw, 112px);
   font-weight: 800;
-  letter-spacing: 0.28em;
-  text-indent: 0.28em;
+  letter-spacing: 0;
   line-height: 1;
+  text-align: center;
+  max-width: 100%;
   user-select: none;
+}
+.runner-intro-cue.is-ready {
+  font-size: clamp(40px, 12vw, 72px);
+  letter-spacing: 0.06em;
+  padding-inline: 0.06em;
+  box-sizing: border-box;
+}
+.runner-intro-cue.is-enter {
+  animation: intro-cue-enter 0.28s ease-out;
+}
+.runner-intro-cue.is-ready.is-enter {
+  animation-duration: 0.16s;
+}
+@keyframes intro-cue-enter {
+  from { opacity: 0; transform: translateY(10px) scale(0.94); }
+  to { opacity: 1; transform: none; }
 }
 
 .runner-stage { display: flex; flex-direction: column; align-items: stretch; gap: 14px; position: relative; }
@@ -598,7 +615,8 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   body::before, body::after, .listen-ripple, .fx-clear-flash, .fx-reward-burst,
   .fx-reward-burst::before, .fx-reward-burst::after,
-  .fx-pop, .fx-shake, #app.wipe-in .screen {
+  .fx-pop, .fx-shake, #app.wipe-in .screen,
+  .runner-intro-cue.is-enter {
     animation: none !important;
   }
 }

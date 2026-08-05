@@ -1,9 +1,9 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0805b1';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805b1';
-import { pop, shake, listenRipple, clearFlash, rewardBurst } from './fx.js?v=0805b1';
-import { createFingerboard } from './fingerboard.js?v=0805b1';
-import { scoreFor, makeRng } from '../engine.js?v=0805b1';
+import { freqOfMidi, detune } from '../theory.js?v=0805c1';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805c1';
+import { pop, shake, listenRipple, clearFlash, rewardBurst } from './fx.js?v=0805c1';
+import { createFingerboard } from './fingerboard.js?v=0805c1';
+import { scoreFor, makeRng } from '../engine.js?v=0805c1';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;
@@ -27,9 +27,11 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   // スタートの select SFX がキャリブレーションに被らないよう、ラウンド実開始時に止める
   synth.stopAll?.();
 
-  async function playSteps(steps, alive) {
+  async function playSteps(steps, alive, onStepStart) {
     for (const s of steps || []) {
       if (!alive()) return;
+      // step開始と同じ実行イベントでcue等を更新（独立タイマーで音と文字を推測同期しない）
+      onStepStart?.(s);
       if (s.type === 'note') {
         const f = detune(freqOfMidi(s.midi, a4), s.cents || 0);
         await synth.playNote({ freq: f, dur: s.dur ?? 1.0, vibrato: false });
@@ -59,18 +61,35 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
     }
   }
 
-  // START導入は通常runner DOMを組む前に位相分離（HUD・回答・もう一度なし）
+  // 導入は通常runner DOMを組む前に位相分離（HUD・回答・もう一度なし）
   if (round.intro && Array.isArray(round.intro.play) && round.intro.play.length) {
     container.innerHTML = '';
     const introRoot = el('div', 'runner-intro');
-    const startEl = el('div', 'runner-intro-start');
-    startEl.textContent = round.intro.label || 'START';
-    introRoot.append(startEl);
+    const cueEl = el('div', 'runner-intro-cue');
+    introRoot.append(cueEl);
     container.append(introRoot);
     const introEpoch = ++playEpoch;
-    await playSteps(round.intro.play, () => !aborted && container.isConnected && introEpoch === playEpoch);
+
+    function showIntroCue(text, ready = false) {
+      if (!text) return;
+      cueEl.classList.toggle('is-ready', ready);
+      cueEl.textContent = text;
+      // cue変更ごとに入場アニメを再発火（reduced-motionはCSS側で動きだけ抑える）
+      cueEl.classList.remove('is-enter');
+      void cueEl.offsetWidth;
+      cueEl.classList.add('is-enter');
+    }
+
+    await playSteps(
+      round.intro.play,
+      () => !aborted && container.isConnected && introEpoch === playEpoch,
+      (step) => {
+        if (step?.cue) showIntroCue(step.cue, step.ready === true);
+      }
+    );
+    // 導入中に終了・再入場した旧roundから、新roundの共有synthへ触れない
+    if (!container.isConnected || aborted || introEpoch !== playEpoch) return;
     synth.stopAll?.();
-    if (!container.isConnected || aborted) return;
   }
 
   container.innerHTML = '';
