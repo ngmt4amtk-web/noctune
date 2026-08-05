@@ -1,9 +1,9 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0805a1';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805a1';
-import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0805a1';
-import { createFingerboard } from './fingerboard.js?v=0805a1';
-import { scoreFor, makeRng } from '../engine.js?v=0805a1';
+import { freqOfMidi, detune } from '../theory.js?v=0805b1';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805b1';
+import { pop, shake, listenRipple, clearFlash, rewardBurst } from './fx.js?v=0805b1';
+import { createFingerboard } from './fingerboard.js?v=0805b1';
+import { scoreFor, makeRng } from '../engine.js?v=0805b1';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;
@@ -26,6 +26,52 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
 
   // スタートの select SFX がキャリブレーションに被らないよう、ラウンド実開始時に止める
   synth.stopAll?.();
+
+  async function playSteps(steps, alive) {
+    for (const s of steps || []) {
+      if (!alive()) return;
+      if (s.type === 'note') {
+        const f = detune(freqOfMidi(s.midi, a4), s.cents || 0);
+        await synth.playNote({ freq: f, dur: s.dur ?? 1.0, vibrato: false });
+      } else if (s.type === 'gap') {
+        await sleep((s.dur ?? 0.3) * 1000);
+      } else if (s.type === 'double') {
+        const f1 = detune(freqOfMidi(s.midi, a4), s.cents || 0);
+        let f2;
+        if (s.interval) {
+          f2 = (f1 * s.interval[0]) / s.interval[1];
+          if (s.cents2) f2 = detune(f2, s.cents2);
+        } else {
+          f2 = detune(f1, s.cents2 || 0);
+        }
+        await synth.playDoubleStop({ f1, f2, dur: s.dur ?? 2.0 });
+      } else if (s.type === 'chord') {
+        const freqs = (s.notes || []).map((n) => detune(freqOfMidi(n.midi, a4), n.cents || 0));
+        await synth.playChord({ freqs, dur: s.dur ?? 1.6, vol: s.vol ?? 0.55 });
+      } else if (s.type === 'seq') {
+        const notes = (s.notes || []).map((n) => ({
+          freq: detune(freqOfMidi(n.midi, a4), n.cents || 0),
+          dur: n.dur ?? 0.5,
+          gap: n.gap ?? 0.05,
+        }));
+        await synth.playSequence(notes);
+      }
+    }
+  }
+
+  // START導入は通常runner DOMを組む前に位相分離（HUD・回答・もう一度なし）
+  if (round.intro && Array.isArray(round.intro.play) && round.intro.play.length) {
+    container.innerHTML = '';
+    const introRoot = el('div', 'runner-intro');
+    const startEl = el('div', 'runner-intro-start');
+    startEl.textContent = round.intro.label || 'START';
+    introRoot.append(startEl);
+    container.append(introRoot);
+    const introEpoch = ++playEpoch;
+    await playSteps(round.intro.play, () => !aborted && container.isConnected && introEpoch === playEpoch);
+    synth.stopAll?.();
+    if (!container.isConnected || aborted) return;
+  }
 
   container.innerHTML = '';
   const root = el('div', 'runner');
@@ -59,38 +105,6 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
 
   function stillLive(epoch, answered) {
     return !answered && !aborted && container.isConnected && epoch === playEpoch;
-  }
-
-  async function playSteps(steps, alive) {
-    for (const s of steps || []) {
-      if (!alive()) return;
-      if (s.type === 'note') {
-        const f = detune(freqOfMidi(s.midi, a4), s.cents || 0);
-        await synth.playNote({ freq: f, dur: s.dur ?? 1.0, vibrato: false });
-      } else if (s.type === 'gap') {
-        await sleep((s.dur ?? 0.3) * 1000);
-      } else if (s.type === 'double') {
-        const f1 = detune(freqOfMidi(s.midi, a4), s.cents || 0);
-        let f2;
-        if (s.interval) {
-          f2 = (f1 * s.interval[0]) / s.interval[1];
-          if (s.cents2) f2 = detune(f2, s.cents2);
-        } else {
-          f2 = detune(f1, s.cents2 || 0);
-        }
-        await synth.playDoubleStop({ f1, f2, dur: s.dur ?? 2.0 });
-      } else if (s.type === 'chord') {
-        const freqs = (s.notes || []).map((n) => detune(freqOfMidi(n.midi, a4), n.cents || 0));
-        await synth.playChord({ freqs, dur: s.dur ?? 1.6, vol: s.vol ?? 0.55 });
-      } else if (s.type === 'seq') {
-        const notes = (s.notes || []).map((n) => ({
-          freq: detune(freqOfMidi(n.midi, a4), n.cents || 0),
-          dur: n.dur ?? 0.5,
-          gap: n.gap ?? 0.05,
-        }));
-        await synth.playSequence(notes);
-      }
-    }
   }
 
   function setAnswerEnabled(on) {
@@ -141,6 +155,23 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
     return !!response.correct;
   }
 
+  function playAnswerFx(q, correct) {
+    if (correct) {
+      if (q.correctFx || q.streakFx) {
+        const name = streak >= 2 && q.streakFx ? q.streakFx : q.correctFx || 'correct';
+        synth.playFx && synth.playFx(name);
+        return;
+      }
+      if (q.feedbackFx !== false) synth.playFx && synth.playFx('correct');
+      return;
+    }
+    if (q.wrongFx) {
+      synth.playFx && synth.playFx(q.wrongFx);
+      return;
+    }
+    if (q.feedbackFx !== false) synth.playFx && synth.playFx('wrong');
+  }
+
   function runQuestion(q) {
     return new Promise((resolve) => {
       asked++;
@@ -160,6 +191,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       let timer = null;
       let raf = null;
       let visCleanup = null;
+      let disconnectObserver = null;
 
       const clearTimers = () => {
         if (timer) clearTimeout(timer);
@@ -168,8 +200,25 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
           visCleanup();
           visCleanup = null;
         }
+        if (disconnectObserver) {
+          disconnectObserver();
+          disconnectObserver = null;
+        }
         timerBar.style.display = 'none';
       };
+
+      // 未回答でプレイ画面を閉じても、待機中のPromiseとroundを残さない
+      const observer = new MutationObserver(() => {
+        if (container.isConnected || answered) return;
+        answered = true;
+        aborted = true;
+        playEpoch += 1;
+        synth.stopAll();
+        clearTimers();
+        resolve(null);
+      });
+      observer.observe(document.documentElement, { childList: true, subtree: true });
+      disconnectObserver = () => observer.disconnect();
 
       const done = (response) => {
         if (answered || aborted) return;
@@ -208,7 +257,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       if (q.input && q.input.kind === 'buttons') {
         // untilCorrect: 誤答は潰して継続、正解を押すまで進まない。採点は最初のタップ
         let firstResponse = null;
-        const useFx = q.feedbackFx !== false;
+        const useFx = q.feedbackFx !== false && !q.wrongFx;
         const grid = answerGrid(
           q.input.options,
           (val, idx) => {
@@ -360,9 +409,12 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       score += scoreFor({ correct: true, streakNow: streak });
       feedbackEl.textContent = q.explain ? `正解 — ${q.explain}` : '正解';
       feedbackEl.classList.add('is-correct');
-      if (useFx) synth.playFx && synth.playFx('correct');
-      pop && pop(feedbackEl);
-      clearFlash(stage);
+      playAnswerFx(q, true);
+      if (q.rewardBurst) rewardBurst && rewardBurst(stage, { strong: streak >= 2 });
+      else {
+        pop && pop(feedbackEl);
+        clearFlash(stage);
+      }
     } else if (q.untilCorrect && (response?.corrected || response?.assisted)) {
       streak = 0;
       feedbackEl.textContent = q.explain ? `確認できた — ${q.explain}` : '確認できた';
@@ -376,16 +428,26 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       feedbackEl.classList.add('is-wrong');
       // untilCorrect は誤答タップごとに鳴らし済み。正解到達の瞬間に再びブザーを鳴らさない
       if (!q.untilCorrect) {
-        if (useFx) synth.playFx && synth.playFx('wrong');
+        playAnswerFx(q, false);
         shake && shake(stage);
       }
     }
     h.update({ current: asked, total, score, combo: streak });
     await sleep(q.explain ? FEEDBACK_MS_LONG : FEEDBACK_MS);
+    // 回答直後に終了して新ラウンドを始めても、旧ラウンドから音へ触れない
+    if (!container.isConnected) {
+      aborted = true;
+      return;
+    }
     if (!correct && Array.isArray(q.feedbackPlayOnWrong) && q.feedbackPlayOnWrong.length) {
       const epoch = ++playEpoch;
       await playSteps(q.feedbackPlayOnWrong, () => !aborted && container.isConnected && epoch === playEpoch);
     }
+    if (!container.isConnected) {
+      aborted = true;
+      return;
+    }
+    // 次の問題の刺激音前にSFX・確認音を止める
     synth.stopAll();
   }
 

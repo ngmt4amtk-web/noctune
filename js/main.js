@@ -1,8 +1,8 @@
-import { loadState, saveState, recordResult, configKeyOf } from './state.js?v=0805a1';
-import { Synth, unlockOnFirstGesture } from './audio.js?v=0805a1';
-import { runRound } from './ui/runner.js?v=0805a1';
-import { nav } from './ui/screens.js?v=0805a1';
-import { MODES } from './modes/registry.js?v=0805a1';
+import { loadState, saveState, recordResult, configKeyOf } from './state.js?v=0805b1';
+import { Synth, unlockOnFirstGesture } from './audio.js?v=0805b1';
+import { runRound } from './ui/runner.js?v=0805b1';
+import { nav } from './ui/screens.js?v=0805b1';
+import { MODES } from './modes/registry.js?v=0805b1';
 
 const state = loadState();
 const synth = new Synth();
@@ -60,6 +60,14 @@ function onRoundComplete(result, mode, config) {
     record: rec,
     better: mode.recordBetter || 'low',
   });
+  // 音当てなど mode.completionFx を持つモードだけ完了SFX（他モードの完了音は変えない）
+  if (mode.completionFx) {
+    const isNewBest = !!(diff.record && diff.record.improved);
+    const fxName = isNewBest
+      ? mode.completionFx.newBest || mode.completionFx.normal
+      : mode.completionFx.normal;
+    if (fxName) synth.playFx?.(fxName);
+  }
   origShow('result', {
     modeId: mode.id,
     config,

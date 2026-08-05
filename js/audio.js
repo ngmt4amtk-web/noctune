@@ -226,6 +226,31 @@ export class Synth {
         tone(988, now + 0.08, 0.1, 0.2, 'triangle');
         tone(1318.5, now + 0.16, 0.14, 0.18, 'triangle');
         break;
+      case 'otoCorrect': // 音当て専用: 少し厚い短い報酬（~320ms）
+        tone(784.0, now, 0.08, 0.18, 'triangle');
+        tone(1046.5, now + 0.06, 0.12, 0.26, 'triangle');
+        tone(1568.0, now + 0.14, 0.16, 0.2, 'triangle');
+        break;
+      case 'otoStreak': // 音当て連続正解: 一段強い（~360ms）
+        tone(880.0, now, 0.08, 0.2, 'triangle');
+        tone(1174.7, now + 0.07, 0.12, 0.24, 'triangle');
+        tone(1760.0, now + 0.15, 0.16, 0.22, 'triangle');
+        break;
+      case 'otoWrong': // 音当て誤答: 短く穏やか（~200ms）
+        tone(349.2, now, 0.09, 0.12, 'sine');
+        tone(277.2, now + 0.07, 0.1, 0.1, 'sine');
+        break;
+      case 'otoComplete': // 音当て完了ファンファーレ（短）
+        tone(659.3, now, 0.1, 0.18, 'triangle');
+        tone(830.6, now + 0.09, 0.1, 0.18, 'triangle');
+        tone(1046.5, now + 0.18, 0.14, 0.16, 'triangle');
+        break;
+      case 'otoCompleteBest': // 音当て自己ベスト強化版
+        tone(659.3, now, 0.09, 0.18, 'triangle');
+        tone(830.6, now + 0.08, 0.1, 0.2, 'triangle');
+        tone(1046.5, now + 0.16, 0.12, 0.2, 'triangle');
+        tone(1318.5, now + 0.24, 0.14, 0.18, 'triangle');
+        break;
       case 'select':
       case 'tap':
         // 短いピッ

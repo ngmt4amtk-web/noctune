@@ -94,12 +94,15 @@ test('v6の音当て記録は保持し、おまかせ進捗は読まない', asy
       version: 6,
       records: { 'oto-ate': { 'range=7': 0.8 } },
       progress: { 'oto-ate': { autoLevel: 2 } },
+      lastConfig: { 'oto-ate': { range: '7' } },
     })
   );
   const { loadState } = await mod();
   const s = loadState();
   assert.equal(s.records['oto-ate']['range=7'], 0.8);
   assert.equal(s.progress['oto-ate'], undefined);
+  // 旧v6設定は壊さず保持（新項目は normalizeConfig 側で既定補完）
+  assert.deepEqual(s.lastConfig['oto-ate'], { range: '7' });
 });
 
 test('旧データのxp/streakと旧音当て記録は読み捨て、他モード記録は残す', async () => {

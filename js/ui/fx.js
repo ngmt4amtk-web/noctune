@@ -40,6 +40,24 @@ export function clearFlash(container) {
   setTimeout(() => flash.remove(), 500);
 }
 
+function prefersReducedMotion() {
+  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+/** 音当て用の短い視覚バースト。連続正解は一段強くし、reduced-motion では clearFlash に落とす */
+export function rewardBurst(container, { strong = false } = {}) {
+  if (!container) return;
+  if (prefersReducedMotion()) {
+    clearFlash(container);
+    return;
+  }
+  const burst = document.createElement('div');
+  burst.className = `fx-reward-burst${strong ? ' is-strong' : ''}`;
+  container.appendChild(burst);
+  burst.addEventListener('animationend', () => burst.remove(), { once: true });
+  setTimeout(() => burst.remove(), 700);
+}
+
 /** 互換のため残すが実体は無効 */
 export function confetti() {}
 export function starBurst() {}

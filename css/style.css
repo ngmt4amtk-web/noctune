@@ -421,6 +421,23 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--accent); }
 
 /* ===== RUNNER ===== */
 .runner { display: flex; flex-direction: column; }
+.runner-intro {
+  min-height: min(70vh, 560px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.runner-intro-start {
+  color: #fff;
+  font-size: clamp(52px, 18vw, 96px);
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-indent: 0.28em;
+  line-height: 1;
+  user-select: none;
+}
+
 .runner-stage { display: flex; flex-direction: column; align-items: stretch; gap: 14px; position: relative; }
 .runner-context {
   align-self: center;
@@ -468,6 +485,53 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--accent); }
   position: absolute; inset: -8px; pointer-events: none; z-index: 3;
   background: radial-gradient(circle at 50% 35%, rgba(180, 230, 255, 0.28), transparent 55%);
   animation: clear-flash 0.38s ease-out forwards;
+}
+.fx-reward-burst {
+  position: absolute; inset: -12px; pointer-events: none; z-index: 3;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(200, 240, 255, 0.34), transparent 42%),
+    radial-gradient(circle at 30% 55%, rgba(120, 210, 255, 0.18), transparent 38%),
+    radial-gradient(circle at 70% 50%, rgba(255, 220, 160, 0.14), transparent 36%);
+  animation: reward-burst 0.55s ease-out forwards;
+}
+.fx-reward-burst::before,
+.fx-reward-burst::after {
+  content: ''; position: absolute; border-radius: 50%;
+  border: 1px solid rgba(188, 232, 255, 0.72);
+  animation: reward-ring 0.55s ease-out forwards;
+}
+.fx-reward-burst::before { inset: 20%; }
+.fx-reward-burst::after {
+  inset: 31%; border-color: rgba(255, 225, 168, 0.62);
+  animation-delay: 0.05s;
+}
+.fx-reward-burst.is-strong {
+  background:
+    radial-gradient(circle at 50% 38%, rgba(225, 249, 255, 0.52), transparent 36%),
+    radial-gradient(circle at 24% 52%, rgba(104, 208, 255, 0.34), transparent 36%),
+    radial-gradient(circle at 76% 48%, rgba(255, 210, 116, 0.30), transparent 34%),
+    radial-gradient(circle at 50% 72%, rgba(167, 126, 255, 0.24), transparent 38%);
+  animation: reward-burst-strong 0.68s cubic-bezier(0.18, 0.82, 0.24, 1) forwards;
+}
+.fx-reward-burst.is-strong::before {
+  border-width: 2px;
+  box-shadow: 0 0 28px rgba(126, 200, 255, 0.45), 0 0 52px rgba(255, 215, 132, 0.20);
+}
+@keyframes reward-burst {
+  0% { opacity: 0; transform: scale(0.92); }
+  35% { opacity: 1; transform: scale(1.04); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+@keyframes reward-burst-strong {
+  0% { opacity: 0; transform: scale(0.86); }
+  30% { opacity: 1; transform: scale(1.06); }
+  62% { opacity: 0.9; transform: scale(1.02); }
+  100% { opacity: 0; transform: scale(1.13); }
+}
+@keyframes reward-ring {
+  0% { opacity: 0; transform: scale(0.5); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.5); }
 }
 @keyframes clear-flash {
   from { opacity: 0.9; }
@@ -532,7 +596,9 @@ input[type="range"] { width: 100%; height: 44px; accent-color: var(--accent); }
 .confetti-piece, .burst-star { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  body::before, body::after, .listen-ripple, .fx-clear-flash, #app.wipe-in .screen {
+  body::before, body::after, .listen-ripple, .fx-clear-flash, .fx-reward-burst,
+  .fx-reward-burst::before, .fx-reward-burst::after,
+  .fx-pop, .fx-shake, #app.wipe-in .screen {
     animation: none !important;
   }
 }
