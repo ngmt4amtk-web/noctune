@@ -1,240 +1,161 @@
-// 音当て: 基準音・調性文脈から最後の音名を導く相対音感トレーニング
-import { noteNamesFor } from '../theory.js?v=0728a1';
-import { resolveQuestionCount } from '../identity.js?v=0728a1';
+// 音当て: 開放弦を基準に、バイオリン第1ポジションの音名を当てる練習
+import { noteNamesFor, noteNameWithOctave, STRINGS, positionsForString, WHITE_PCS } from '../theory.js?v=0805a1';
+import { resolveQuestionCount } from '../identity.js?v=0805a1';
+import { shuffle } from '../engine.js?v=0805a1';
 
-const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
-const CHROMATIC = [...Array(12).keys()];
-
-export const OTO_LEVELS = [
-  { id: 'direction', label: '音の向き', sub: '高い・同じ・低い', intervals: null },
-  { id: 'triad', label: '3音', sub: '主音・3番目・5番目', intervals: [0, 4, 7] },
-  { id: 'penta', label: '5音', sub: 'すき間の広い5音', intervals: [0, 2, 4, 7, 9] },
-  { id: 'diatonic', label: '7音', sub: '長音階のすべて', intervals: MAJOR_SCALE },
-  { id: 'chromatic', label: '12音', sub: '半音を含むすべて', intervals: CHROMATIC },
+export const RANGE_OPTIONS = [
+  {
+    value: '7',
+    label: '7音',
+    sub: 'C4〜B4の自然音',
+    pool: [60, 62, 64, 65, 67, 69, 71],
+  },
+  {
+    value: '2oct',
+    label: '2オクターブ',
+    sub: '同じ音名を高さ違いで聴く（オクターブ番号は答えない）',
+    pool: [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83],
+  },
+  {
+    value: 'violin',
+    label: 'バイオリン音域',
+    sub: '第1ポジションの自然音。音名のみ答える',
+    pool: [55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83],
+  },
 ];
 
-const LEVEL_INDEX = Object.fromEntries(OTO_LEVELS.map((level, index) => [level.id, index]));
-const ROOT_PCS = {
-  none: [0],
-  sharp: [0, 7, 2, 9, 4],
-  flat: [0, 5, 10, 3, 8],
-};
+const RANGE_BY_ID = Object.fromEntries(RANGE_OPTIONS.map((r) => [r.value, r]));
+const VALID_RANGES = new Set(RANGE_OPTIONS.map((r) => r.value));
+
+/** 境界の開放弦は新しい弦側に属する */
+export const STRING_NATURALS = [
+  [55, 57, 59, 60], // G
+  [62, 64, 65, 67], // D
+  [69, 71, 72, 74], // A
+  [76, 77, 79, 81, 83], // E
+];
+
+export const CALIBRATION_MIDIS = [55, 62, 69, 76];
 
 function pcOf(midi) {
   return ((midi % 12) + 12) % 12;
 }
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
+export function resolveRange(config) {
+  const value = config?.range;
+  return VALID_RANGES.has(value) ? value : '7';
 }
 
-function choose(arr, rng) {
-  return arr[Math.floor(rng() * arr.length)];
+export function mapTarget(midi) {
+  for (let stringIndex = 0; stringIndex < STRING_NATURALS.length; stringIndex++) {
+    if (!STRING_NATURALS[stringIndex].includes(midi)) continue;
+    const pos = positionsForString(stringIndex).find((p) => p.midi === midi);
+    if (!pos) break;
+    const stringName = STRINGS[stringIndex].name;
+    const fingerLabel = pos.finger === 0 ? '開放' : `${pos.finger}指`;
+    return {
+      stringIndex,
+      stringName,
+      anchorMidi: STRINGS[stringIndex].midi,
+      finger: pos.finger,
+      semi: pos.semi,
+      mappingLabel: `${stringName}${fingerLabel}`,
+    };
+  }
+  throw new Error(`unmapped oto-ate target midi: ${midi}`);
 }
 
-function resolveAccidental(config) {
-  const value = config?.accidental;
-  return value === 'none' || value === 'flat' || value === 'sharp' ? value : 'none';
-}
+/** シャッフル袋。プール使い切りまで非反復。補充境界では直前MIDI・可能なら直前PCを避ける */
+export function createTargetDeck(pool, rng) {
+  let bag = shuffle(pool, rng);
+  let index = 0;
+  let prevMidi = null;
+  let prevPc = null;
 
-function resolveStage(config) {
-  const value = config?.stage;
-  return value === 'auto' || Object.hasOwn(LEVEL_INDEX, value) ? value : 'auto';
-}
+  function refill() {
+    bag = shuffle(pool, rng);
+    if (bag.length <= 1 || prevMidi == null) {
+      index = 0;
+      return;
+    }
+    const prefer = (midi) => midi !== prevMidi && pcOf(midi) !== prevPc;
+    const okMidi = (midi) => midi !== prevMidi;
+    let swapAt = bag.findIndex(prefer);
+    if (swapAt < 0) swapAt = bag.findIndex(okMidi);
+    if (swapAt > 0) [bag[0], bag[swapAt]] = [bag[swapAt], bag[0]];
+    index = 0;
+  }
 
-function pitchOption(pc, names) {
-  return { value: pc, label: names[pc] };
-}
-
-function noteStep(midi, dur = 0.3, gap = 0.035) {
-  return { freq: null, midi, dur, gap };
-}
-
-function cadence(rootMidi, targetMidi) {
-  const chord = (offset) => ({
-    type: 'chord',
-    notes: [0, 4, 7].map((semi) => ({ midi: rootMidi + offset + semi })),
-    dur: 0.34,
-    vol: 0.42,
-  });
-  return [
-    chord(0),
-    { type: 'gap', dur: 0.055 },
-    chord(5),
-    { type: 'gap', dur: 0.055 },
-    chord(7),
-    { type: 'gap', dur: 0.055 },
-    { ...chord(0), dur: 0.52 },
-    { type: 'gap', dur: 0.22 },
-    { type: 'note', midi: targetMidi, dur: 0.9 },
-  ];
-}
-
-function guideFromScale(rootMidi, targetMidi, interval) {
-  const degreeIndex = MAJOR_SCALE.indexOf(interval);
-  const semitones = degreeIndex >= 0 ? MAJOR_SCALE.slice(0, degreeIndex + 1) : [0, interval];
-  if (semitones.length === 1) semitones.push(0);
-  return [
-    {
-      type: 'seq',
-      notes: semitones.map((semi) => noteStep(rootMidi + 12 + semi)),
-    },
-    { type: 'gap', dur: 0.12 },
-    { type: 'note', midi: targetMidi, dur: 0.75 },
-  ];
-}
-
-function guideChromatic(anchorMidi, targetMidi, interval) {
-  const semitones = [...Array(interval + 1).keys()];
-  if (semitones.length === 1) semitones.push(0);
-  return [
-    {
-      type: 'seq',
-      notes: semitones.map((semi) => noteStep(anchorMidi + semi, 0.24, 0.025)),
-    },
-    { type: 'gap', dur: 0.12 },
-    { type: 'note', midi: targetMidi, dur: 0.75 },
-  ];
-}
-
-function rootChoices(levelIndex, accidental) {
-  const roots = ROOT_PCS[accidental] || ROOT_PCS.none;
-  if (levelIndex <= 1 || roots.length === 1) return [roots[0]];
-  if (levelIndex === 2) return roots.slice(0, Math.min(3, roots.length));
-  return roots;
-}
-
-function makeDirectionQuestion(rng) {
-  const anchorMidi = 62 + Math.floor(rng() * 8);
-  const delta = choose([-7, -4, -2, 0, 2, 4, 7], rng);
-  const targetMidi = anchorMidi + delta;
-  const correct = delta < 0 ? 0 : delta > 0 ? 2 : 1;
-  const label = ['低い', '同じ', '高い'][correct];
   return {
-    play: [
-      { type: 'note', midi: anchorMidi, dur: 0.68 },
-      { type: 'gap', dur: 0.22 },
-      { type: 'note', midi: targetMidi, dur: 0.9 },
-    ],
-    prompt: '次の音は、基準より？',
-    context: '基準音 → 次の音',
-    input: { kind: 'buttons', options: ['低い', '同じ', '高い'], correct },
-    untilCorrect: true,
-    assistanceCountsAsMiss: true,
-    explain: `次の音は基準より「${label}」`,
-    hint: `2音を比べると、答えは「${label}」です`,
-    guideLabel: 'ゆっくり聴く',
-    guidePlay: [
-      { type: 'note', midi: anchorMidi, dur: 0.9 },
-      { type: 'gap', dur: 0.42 },
-      { type: 'note', midi: targetMidi, dur: 1.0 },
-    ],
-    replay: true,
-    detail: {
-      modeId: 'oto-ate',
-      stageId: 'direction',
-      stageLabel: OTO_LEVELS[0].label,
-      anchorMidi,
-      targetMidi,
-      deltaSemitones: delta,
-      targetPc: pcOf(targetMidi),
+    next() {
+      if (index >= bag.length) refill();
+      const midi = bag[index++];
+      prevMidi = midi;
+      prevPc = pcOf(midi);
+      return midi;
     },
   };
 }
 
-function makeTonalQuestion(levelIndex, accidental, style, prevTargetPc, rng) {
-  const level = OTO_LEVELS[levelIndex];
-  const names = noteNamesFor(style, accidental === 'flat' ? 'flat' : 'sharp');
-  const roots = rootChoices(levelIndex, accidental);
-  let rootPc = roots[0];
-  let interval = level.intervals[0];
-  let targetPc = pcOf(rootPc + interval);
-
-  for (let tries = 0; tries < 20; tries++) {
-    rootPc = choose(roots, rng);
-    interval = choose(level.intervals, rng);
-    targetPc = pcOf(rootPc + interval);
-    if (targetPc !== prevTargetPc) break;
-  }
-
-  const rootMidi = 48 + rootPc;
-  const targetMidi = rootMidi + 12 + interval;
-  const options = level.intervals.map((semi) => pitchOption(pcOf(rootPc + semi), names));
-  const correct = level.intervals.indexOf(interval);
-  const rootLabel = names[rootPc];
-  const targetLabel = names[targetPc];
-  const degree = MAJOR_SCALE.indexOf(interval) + 1;
-
-  return {
-    play: cadence(rootMidi, targetMidi),
-    prompt: '響きの最後の音は？',
-    context: `主音 ${rootLabel}`,
-    input: { kind: 'buttons', options, correct },
-    untilCorrect: true,
-    assistanceCountsAsMiss: true,
-    explain: `主音 ${rootLabel} から${degree}番目、答えは「${targetLabel}」`,
-    hint: `主音 ${rootLabel} から${degree}番目。答えは「${targetLabel}」です`,
-    guideLabel: '音の道すじ',
-    guidePlay: guideFromScale(rootMidi, targetMidi, interval),
-    replay: true,
-    detail: {
-      modeId: 'oto-ate',
-      stageId: level.id,
-      stageLabel: level.label,
-      rootMidi,
-      rootPc,
-      targetMidi,
-      targetPc,
-      intervalSemitones: interval,
-      scaleDegree: degree,
-      accidental,
-    },
-  };
+function note(midi, dur) {
+  return { type: 'note', midi, dur };
 }
 
-function makeChromaticQuestion(accidental, style, prevTargetPc, rng) {
-  const names = noteNamesFor(style, accidental === 'flat' ? 'flat' : 'sharp');
-  let anchorPc = 0;
-  let interval = 0;
-  let targetPc = 0;
-  for (let tries = 0; tries < 20; tries++) {
-    anchorPc = Math.floor(rng() * 12);
-    interval = Math.floor(rng() * 12);
-    targetPc = pcOf(anchorPc + interval);
-    if (targetPc !== prevTargetPc) break;
+function gap(dur) {
+  return { type: 'gap', dur };
+}
+
+function anchorTargetPlay(anchorMidi, targetMidi) {
+  return [note(anchorMidi, 0.68), gap(0.22), note(targetMidi, 0.9)];
+}
+
+function calibrationPlay() {
+  const steps = [];
+  for (let i = 0; i < CALIBRATION_MIDIS.length; i++) {
+    steps.push(note(CALIBRATION_MIDIS[i], 0.42));
+    if (i < CALIBRATION_MIDIS.length - 1) steps.push(gap(0.08));
   }
-  const anchorMidi = 60 + anchorPc;
-  const targetMidi = anchorMidi + interval;
-  const anchorLabel = names[anchorPc];
-  const targetLabel = names[targetPc];
-  const relation = interval === 0 ? '同じ高さ' : `半音${interval}個上`;
+  steps.push(gap(0.35));
+  return steps;
+}
+
+function pitchClassOptions(style) {
+  const names = noteNamesFor(style, 'sharp');
+  return WHITE_PCS.map((pc) => ({ value: pc, label: names[pc] }));
+}
+
+function makeQuestion({ targetMidi, style, firstOfRound }) {
+  const mapped = mapTarget(targetMidi);
+  const targetPc = pcOf(targetMidi);
+  const options = pitchClassOptions(style);
+  const correct = WHITE_PCS.indexOf(targetPc);
+  const pcLabel = options[correct].label;
+  const anchorLabel = noteNamesFor(style, 'sharp')[pcOf(mapped.anchorMidi)];
+  const sciName = noteNameWithOctave(targetMidi, 'abc');
+  const play = firstOfRound
+    ? [...calibrationPlay(), ...anchorTargetPlay(mapped.anchorMidi, targetMidi)]
+    : anchorTargetPlay(mapped.anchorMidi, targetMidi);
 
   return {
-    play: [
-      { type: 'note', midi: anchorMidi, dur: 0.68 },
-      { type: 'gap', dur: 0.22 },
-      { type: 'note', midi: targetMidi, dur: 0.9 },
-    ],
-    prompt: '次の音名は？',
-    context: `基準音 ${anchorLabel}`,
-    input: { kind: 'buttons', options: CHROMATIC.map((pc) => pitchOption(pc, names)), correct: targetPc },
-    untilCorrect: true,
-    assistanceCountsAsMiss: true,
-    explain: `基準音 ${anchorLabel} から${relation}、答えは「${targetLabel}」`,
-    hint: `基準音 ${anchorLabel} から${relation}。答えは「${targetLabel}」です`,
-    guideLabel: '半音でたどる',
-    guidePlay: guideChromatic(anchorMidi, targetMidi, interval),
+    play,
+    prompt: '最後の1音の名前は？',
+    context: `基準：${mapped.stringName}の${anchorLabel}`,
+    input: { kind: 'buttons', layout: 'pc7', options, correct },
+    feedbackFx: false,
+    feedbackPlayOnWrong: anchorTargetPlay(mapped.anchorMidi, targetMidi),
     replay: true,
+    explain: `${pcLabel}（${sciName}・${mapped.mappingLabel}）`,
     detail: {
       modeId: 'oto-ate',
-      stageId: 'chromatic',
-      stageLabel: OTO_LEVELS[4].label,
-      anchorMidi,
-      anchorPc,
+      rangeId: null,
       targetMidi,
       targetPc,
-      intervalSemitones: interval,
-      accidental,
+      anchorMidi: mapped.anchorMidi,
+      stringIndex: mapped.stringIndex,
+      stringName: mapped.stringName,
+      finger: mapped.finger,
+      mappingLabel: mapped.mappingLabel,
+      sciName,
     },
   };
 }
@@ -242,31 +163,18 @@ function makeChromaticQuestion(accidental, style, prevTargetPc, rng) {
 export default {
   id: 'oto-ate',
   title: '音当て',
-  subtitle: '基準音から、少しずつ当てる',
+  subtitle: '開放弦を基準に、音名を当てる',
   icon: 'assets/modes/oto-ate.png',
   color: '#7ec8ff',
   setup: [
     {
-      key: 'stage',
-      label: '練習段階',
+      key: 'range',
+      label: '音域',
       layout: 'panels',
-      hint: '基準音との関係を聴く練習です。迷ったら「音の道すじ」で答えまで聴き直せます。',
-      options: [
-        { value: 'auto', label: 'おまかせ', sub: 'できたら3→5→7音。前回の続きから' },
-        ...OTO_LEVELS.map((level) => ({ value: level.id, label: level.label, sub: level.sub })),
-      ],
-      disableWhen: { accidental: 'none', values: ['chromatic'], reason: '12音は臨時記号ありで使えます' },
-      default: 'auto',
-    },
-    {
-      key: 'accidental',
-      label: '使う音',
-      options: [
-        { value: 'none', label: '白鍵のみ' },
-        { value: 'sharp', label: '♯を含む' },
-        { value: 'flat', label: '♭を含む' },
-      ],
-      default: 'none',
+      hint:
+        '最初に4本の開放弦の高さを一度確認します。その後は毎問、問題音を弾く弦の開放音→問題音の順に鳴ります。最後の1音の名前を答えてください。開放弦との距離を使う、バイオリン向けの練習です。基準なしで当てる絶対音感テストではありません。',
+      options: RANGE_OPTIONS.map(({ value, label, sub }) => ({ value, label, sub })),
+      default: '7',
     },
   ],
   recordBetter: 'high',
@@ -275,69 +183,42 @@ export default {
     return { value: accuracy, display: `${Math.round(accuracy * 100)}%` };
   },
   normalizeConfig(config) {
-    if (config?.accidental === 'none' && config.stage === 'chromatic') config.stage = 'diatonic';
+    if (!config || typeof config !== 'object') return config;
+    config.range = resolveRange(config);
+    delete config.stage;
+    delete config.accidental;
     return config;
-  },
-  updateProgress({ summary, state }) {
-    if (!summary?.adaptive || !Number.isFinite(summary.autoLevelEnd)) return;
-    if (!state.progress || typeof state.progress !== 'object') state.progress = {};
-    state.progress['oto-ate'] = { autoLevel: clamp(Math.round(summary.autoLevelEnd), 0, OTO_LEVELS.length - 1) };
   },
   needsFingerboard: false,
   createRound(config = {}, rng, opts = {}) {
     const style = opts.noteStyle || opts.settings?.noteStyle || 'doremi';
-    const accidental = resolveAccidental(config);
-    const stage = resolveStage(config);
+    const rangeId = resolveRange(config);
+    const range = RANGE_BY_ID[rangeId];
     const total = resolveQuestionCount(opts.settings);
-    const adaptive = stage === 'auto';
-    const maxLevel = accidental === 'none' ? LEVEL_INDEX.diatonic : LEVEL_INDEX.chromatic;
-    let levelIndex = adaptive
-      ? clamp(Math.round(opts.progress?.autoLevel || 0), 0, maxLevel)
-      : clamp(LEVEL_INDEX[stage] ?? 0, 0, maxLevel);
+    const deck = createTargetDeck(range.pool, rng);
     let asked = 0;
     let correctCount = 0;
-    let correctStreak = 0;
-    let prevTargetPc = null;
 
     return {
       total,
       next(prevCorrect) {
-        if (asked > 0) {
-          if (prevCorrect) {
-            correctCount++;
-            correctStreak++;
-            const needed = levelIndex === LEVEL_INDEX.direction ? 1 : 2;
-            if (adaptive && correctStreak >= needed && levelIndex < maxLevel) {
-              levelIndex++;
-              correctStreak = 0;
-            }
-          } else {
-            correctStreak = 0;
-            if (adaptive && levelIndex > LEVEL_INDEX.direction) levelIndex--;
-          }
-        }
+        if (asked > 0 && prevCorrect) correctCount++;
         if (asked >= total) return null;
         asked++;
-
-        let question;
-        if (levelIndex === LEVEL_INDEX.direction) {
-          question = makeDirectionQuestion(rng);
-        } else if (levelIndex === LEVEL_INDEX.chromatic) {
-          question = makeChromaticQuestion(accidental, style, prevTargetPc, rng);
-        } else {
-          question = makeTonalQuestion(levelIndex, accidental, style, prevTargetPc, rng);
-        }
-        prevTargetPc = question.detail.targetPc;
+        const targetMidi = deck.next();
+        const question = makeQuestion({
+          targetMidi,
+          style,
+          firstOfRound: asked === 1,
+        });
+        question.detail.rangeId = rangeId;
         return question;
       },
       summary() {
         const accuracy = total ? correctCount / total : 0;
-        const suffix = adaptive ? `・次回は「${OTO_LEVELS[levelIndex].label}」から` : '';
         return {
           accuracy,
-          detail: `${correctCount}/${total}問をヒントなしで正解${suffix}`,
-          adaptive,
-          autoLevelEnd: levelIndex,
+          detail: `${correctCount}/${total}問正解`,
         };
       },
     };

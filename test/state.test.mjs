@@ -12,12 +12,12 @@ function freshStorage() {
 
 const mod = () => import(`./../js/state.js?t=${Date.now()}-${Math.random()}`);
 
-test('初期状態 v5・records/進捗空・既定5問', async () => {
+test('初期状態 v6・records/進捗空・既定5問', async () => {
   freshStorage();
   globalThis.localStorage.setItem('noctune-v1', '{{{broken');
   const { loadState } = await mod();
   const s = loadState();
-  assert.equal(s.version, 5);
+  assert.equal(s.version, 6);
   assert.deepEqual(s.records, {});
   assert.deepEqual(s.progress, {});
   assert.equal(s.settings.a4, 442);
@@ -56,15 +56,50 @@ test('v4以降で選び直した10問は保持', async () => {
   assert.equal(s.settings.questionCount, 10);
 });
 
-test('相対音感のおまかせ段階を復元し範囲外は丸める', async () => {
+test('v5→v6: 音当て記録とおまかせ進捗だけ捨て、他は残す', async () => {
   freshStorage();
   globalThis.localStorage.setItem(
     'noctune-v1',
-    JSON.stringify({ version: 5, progress: { 'oto-ate': { autoLevel: 99 } } })
+    JSON.stringify({
+      version: 5,
+      progress: { 'oto-ate': { autoLevel: 3 } },
+      records: {
+        'oto-ate': { 'stage=auto&accidental=none': 0.9 },
+        'chord-ate': { 'gen=harmonic&size=3': 0.7 },
+      },
+      settings: { a4: 440, questionCount: 10 },
+      lastConfig: {
+        'oto-ate': { stage: 'auto', accidental: 'sharp' },
+        'chord-ate': { gen: 'free', size: 2 },
+      },
+    })
   );
   const { loadState } = await mod();
   const s = loadState();
-  assert.deepEqual(s.progress['oto-ate'], { autoLevel: 4 });
+  assert.equal(s.version, 6);
+  assert.equal(s.records['oto-ate'], undefined);
+  assert.equal(s.records['chord-ate']['gen=harmonic&size=3'], 0.7);
+  assert.deepEqual(s.progress, {});
+  assert.equal(s.settings.a4, 440);
+  assert.equal(s.settings.questionCount, 10);
+  assert.equal(s.lastConfig['oto-ate'], undefined);
+  assert.deepEqual(s.lastConfig['chord-ate'], { gen: 'free', size: 2 });
+});
+
+test('v6の音当て記録は保持し、おまかせ進捗は読まない', async () => {
+  freshStorage();
+  globalThis.localStorage.setItem(
+    'noctune-v1',
+    JSON.stringify({
+      version: 6,
+      records: { 'oto-ate': { 'range=7': 0.8 } },
+      progress: { 'oto-ate': { autoLevel: 2 } },
+    })
+  );
+  const { loadState } = await mod();
+  const s = loadState();
+  assert.equal(s.records['oto-ate']['range=7'], 0.8);
+  assert.equal(s.progress['oto-ate'], undefined);
 });
 
 test('旧データのxp/streakと旧音当て記録は読み捨て、他モード記録は残す', async () => {

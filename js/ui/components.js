@@ -1,6 +1,6 @@
 // UI部品 — NOCTUNE 斜めガラス／画像アイコン
 
-import { iconEl, isImageIcon } from './icons.js?v=0728a1';
+import { iconEl, isImageIcon } from './icons.js?v=0805a1';
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);
@@ -52,8 +52,12 @@ export function iconButton(name, onClick, opts = {}) {
 }
 
 export function answerGrid(options, onPick, opts = {}) {
-  const cols = opts.cols || (options.length === 12 ? 3 : 2);
-  const grid = el('div', { class: `answer-grid${cols === 3 ? ' cols3' : ''}` });
+  const layout = opts.layout || (options.length === 7 ? 'pc7' : null);
+  const cols = opts.cols || (layout === 'pc7' ? 4 : options.length === 12 ? 3 : 2);
+  const classes = ['answer-grid'];
+  if (layout === 'pc7') classes.push('pc7');
+  else if (cols === 3) classes.push('cols3');
+  const grid = el('div', { class: classes.join(' ') });
   options.forEach((opt, index) => {
     const label = typeof opt === 'string' ? opt : opt.label;
     const value = typeof opt === 'string' ? opt : opt.value;

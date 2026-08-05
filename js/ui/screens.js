@@ -1,9 +1,9 @@
 // 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
-import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0728a1';
-import { iconEl } from './icons.js?v=0728a1';
-import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0728a1';
-import { freqOfMidi, detune } from '../theory.js?v=0728a1';
-import { isImageIcon } from './icons.js?v=0728a1';
+import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0805a1';
+import { iconEl } from './icons.js?v=0805a1';
+import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0805a1';
+import { freqOfMidi, detune } from '../theory.js?v=0805a1';
+import { isImageIcon } from './icons.js?v=0805a1';
 
 let deps = null;
 
@@ -114,8 +114,7 @@ function answerLabel(rec) {
 function insightFromLog(modeId, log) {
   if (!Array.isArray(log) || !log.length) return null;
   if (modeId === 'oto-ate') {
-    const firstTry = log.filter((row) => row.correct).length;
-    const coached = log.filter((row) => !row.correct && (row.response?.corrected || row.response?.assisted)).length;
+    const hit = log.filter((row) => row.correct).length;
     const miss = {};
     for (const row of log) {
       if (row.correct) continue;
@@ -123,9 +122,8 @@ function insightFromLog(modeId, log) {
       if (name) miss[name] = (miss[name] || 0) + 1;
     }
     const entries = Object.entries(miss).sort((a, b) => b[1] - a[1]);
-    const recovered = coached ? `・${coached}問は道すじで確認` : '';
-    if (!entries.length) return `全${log.length}問をヒントなしで正解`;
-    return `自力で ${firstTry}/${log.length}問${recovered}。次に聴きたい音: ${entries
+    if (!entries.length) return `全${log.length}問正解`;
+    return `${hit}/${log.length}問正解。次に聴きたい音: ${entries
       .slice(0, 3)
       .map(([name, count]) => `${name}×${count}`)
       .join(' / ')}`;

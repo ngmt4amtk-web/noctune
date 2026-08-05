@@ -2,10 +2,35 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MODES } from '../js/modes/registry.js';
 import chordAte from '../js/modes/chord-ate.js';
+import {
+  RANGE_OPTIONS,
+  STRING_NATURALS,
+  CALIBRATION_MIDIS,
+  mapTarget,
+  createTargetDeck,
+  resolveRange,
+} from '../js/modes/oto-ate.js';
 import { makeRng } from '../js/engine.js';
+import { WHITE_PCS } from '../js/theory.js';
 
 const QUALITY_WORDS = ['メジャー', '短3度', '長三和音', '短三和音', '減三和音', 'sus4'];
 const oto = MODES.find((mode) => mode.id === 'oto-ate');
+const FORBIDDEN_STEP = new Set(['chord', 'double', 'seq']);
+
+function noteMidis(steps) {
+  return (steps || []).filter((s) => s.type === 'note').map((s) => s.midi);
+}
+
+function assertCleanQuestion(q) {
+  assert.equal(q.untilCorrect, undefined);
+  assert.equal(q.guidePlay, undefined);
+  assert.equal(q.timeLimitMs, undefined);
+  assert.equal(q.feedbackFx, false);
+  assert.equal(q.hint, undefined);
+  for (const step of q.play || []) {
+    assert.equal(FORBIDDEN_STEP.has(step.type), false, `forbidden play type ${step.type}`);
+  }
+}
 
 test('registry順と表示名', () => {
   assert.deepEqual(
@@ -20,97 +45,150 @@ test('全モードが画像アイコンを持つ', () => {
   }
 });
 
-test('音当て: 最初は基準との高低を3択で聴く', () => {
-  const q = oto
-    .createRound({ stage: 'direction', accidental: 'none' }, makeRng(4), {
-      settings: { questionCount: 5, noteStyle: 'doremi' },
-    })
-    .next(null);
-  assert.deepEqual(q.input.options, ['低い', '同じ', '高い']);
-  assert.equal(q.play.filter((step) => step.type === 'note').length, 2);
-  assert.ok(q.guidePlay.length >= 3);
-  assert.equal(q.untilCorrect, true);
-  assert.equal(q.assistanceCountsAsMiss, true);
+test('音当て: setupは音域のみ・禁止オプションなし', () => {
+  assert.deepEqual(
+    oto.setup.map((s) => s.key),
+    ['range']
+  );
+  assert.equal(oto.setup[0].default, '7');
+  assert.deepEqual(
+    oto.setup[0].options.map((o) => o.value),
+    ['7', '2oct', 'violin']
+  );
+  assert.deepEqual(
+    oto.setup[0].options.map((o) => o.label),
+    ['7音', '2オクターブ', 'バイオリン音域']
+  );
+  const blob = JSON.stringify(oto.setup);
+  assert.equal(blob.includes('おまかせ'), false);
+  assert.equal(blob.includes('accidental'), false);
+  assert.equal(blob.includes('stage'), false);
+  assert.equal(blob.includes('direction'), false);
+  assert.equal(blob.includes('chromatic'), false);
+
+  const cfg = oto.normalizeConfig({ stage: 'auto', accidental: 'sharp', range: 'nope' });
+  assert.equal(cfg.range, '7');
+  assert.equal(cfg.stage, undefined);
+  assert.equal(cfg.accidental, undefined);
+  assert.equal(resolveRange({}), '7');
 });
 
-test('音当て: 3音→5音→7音は調性文脈と段階別の選択肢を持つ', () => {
-  const stages = [
-    ['triad', 3],
-    ['penta', 5],
-    ['diatonic', 7],
-  ];
-  for (const [stage, count] of stages) {
-    const q = oto
-      .createRound({ stage, accidental: 'none' }, makeRng(5), {
-        settings: { questionCount: 5, noteStyle: 'doremi' },
-      })
-      .next(null);
-    assert.equal(q.input.options.length, count);
-    assert.equal(q.play[0].type, 'chord');
-    assert.equal(q.play.filter((step) => step.type === 'chord').length, 4);
-    assert.equal(q.play.at(-1).type, 'note');
-    assert.equal(q.input.options[q.input.correct].value, q.detail.targetPc);
-    assert.equal(q.input.options.some((opt) => /[♯♭]/.test(opt.label)), false);
-    assert.match(q.context, /^主音 /);
-    assert.ok(q.hint.includes(q.input.options[q.input.correct].label));
+test('音当て: 各音域のプール境界・臨時記号なし', () => {
+  const byValue = Object.fromEntries(RANGE_OPTIONS.map((r) => [r.value, r.pool]));
+  assert.deepEqual(byValue['7'], [60, 62, 64, 65, 67, 69, 71]);
+  assert.deepEqual(byValue['2oct'], [60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83]);
+  assert.deepEqual(byValue.violin, [55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83]);
+  assert.equal(byValue.violin.includes(55), true);
+  assert.equal(byValue.violin.includes(83), true);
+  for (const pool of Object.values(byValue)) {
+    for (const midi of pool) {
+      assert.equal(WHITE_PCS.includes(((midi % 12) + 12) % 12), true);
+    }
   }
 });
 
-test('音当て: 12音は基準音との関係・選択表記・ガイドを持つ', () => {
-  const flat = oto
-    .createRound({ stage: 'chromatic', accidental: 'flat' }, makeRng(6), {
-      settings: { questionCount: 5, noteStyle: 'abc' },
-    })
-    .next(null);
-  assert.equal(flat.input.options.length, 12);
-  assert.deepEqual(
-    flat.input.options.slice(0, 3).map((option) => option.label),
-    ['C', 'D♭', 'D']
-  );
-  assert.equal(flat.input.options.map((option) => option.label).join('').includes('♯'), false);
-  assert.equal(flat.input.correct, flat.detail.targetPc);
-  assert.equal(flat.play.filter((step) => step.type === 'note').length, 2);
-  assert.ok(flat.guidePlay.length >= 3);
-
-  const sharp = oto
-    .createRound({ stage: 'chromatic', accidental: 'sharp' }, makeRng(7), {
-      settings: { questionCount: 5, noteStyle: 'doremi' },
-    })
-    .next(null);
-  assert.ok(sharp.input.options.map((option) => option.label).join('').includes('♯'));
-  assert.equal(sharp.detail.accidental, 'sharp');
-});
-
-test('音当て: 白鍵のみでは12音を選んでも7音へ安全に丸める', () => {
-  const q = oto
-    .createRound({ stage: 'chromatic', accidental: 'none' }, makeRng(8), {
-      settings: { questionCount: 5, noteStyle: 'doremi' },
-    })
-    .next(null);
-  assert.equal(q.detail.stageId, 'diatonic');
-  assert.equal(q.input.options.length, 7);
-});
-
-test('音当て: おまかせは正解で段階を上げ、誤答で一段戻す', () => {
-  const round = oto.createRound({ stage: 'auto', accidental: 'sharp' }, makeRng(9), {
-    settings: { questionCount: 5, noteStyle: 'doremi' },
-    progress: { autoLevel: 0 },
+test('音当て: 第1問はキャリブレーション＋開放弦＋問題音、以降は開放弦＋問題音', () => {
+  const round = oto.createRound({ range: 'violin' }, makeRng(11), {
+    settings: { questionCount: 3, noteStyle: 'doremi' },
   });
   const q1 = round.next(null);
+  const notes1 = noteMidis(q1.play);
+  assert.match(q1.context, /^基準：[GDAE]線の[ソレラミ]$/);
+  assert.deepEqual(notes1.slice(0, 4), CALIBRATION_MIDIS);
+  assert.equal(notes1[4], q1.detail.anchorMidi);
+  assert.equal(notes1[5], q1.detail.targetMidi);
+  assert.equal(notes1.length, 6);
+  assertCleanQuestion(q1);
+
   const q2 = round.next(true);
-  const q3 = round.next(true);
-  const q4 = round.next(true);
-  const q5 = round.next(false);
-  assert.equal(q1.detail.stageId, 'direction');
-  assert.equal(q2.detail.stageId, 'triad');
-  assert.equal(q3.detail.stageId, 'triad');
-  assert.equal(q4.detail.stageId, 'penta');
-  assert.equal(q5.detail.stageId, 'triad');
-  assert.equal(round.next(true), null);
-  const summary = round.summary();
-  assert.equal(summary.adaptive, true);
-  assert.equal(summary.accuracy, 4 / 5);
-  assert.equal(summary.autoLevelEnd, 1);
+  const notes2 = noteMidis(q2.play);
+  assert.deepEqual(notes2, [q2.detail.anchorMidi, q2.detail.targetMidi]);
+  assert.equal(notes2.length, 2);
+  assert.notDeepEqual(notes2.slice(0, 4), CALIBRATION_MIDIS);
+  assertCleanQuestion(q2);
+});
+
+test('音当て: 7択の音名ボタンと正解indexが全音域で一致', () => {
+  for (const range of ['7', '2oct', 'violin']) {
+    for (const style of ['doremi', 'abc']) {
+      const round = oto.createRound({ range }, makeRng(21), {
+        settings: { questionCount: 20, noteStyle: style },
+      });
+      let q = round.next(null);
+      let n = 0;
+      while (q) {
+        n++;
+        assert.equal(q.input.options.length, 7);
+        assert.deepEqual(
+          q.input.options.map((o) => o.value),
+          WHITE_PCS
+        );
+        assert.equal(q.input.options[q.input.correct].value, q.detail.targetPc);
+        assert.equal(q.input.correct, WHITE_PCS.indexOf(q.detail.targetPc));
+        if (style === 'doremi') assert.equal(q.input.options[0].label, 'ド');
+        if (style === 'abc') assert.equal(q.input.options[0].label, 'C');
+        if (style === 'doremi') assert.match(q.context, /^基準：[GDAE]線の[ソレラミ]$/);
+        if (style === 'abc') assert.match(q.context, /^基準：[GDAE]線の[GDAE]$/);
+        assertCleanQuestion(q);
+        assert.ok(Array.isArray(q.feedbackPlayOnWrong));
+        assert.deepEqual(noteMidis(q.feedbackPlayOnWrong), [q.detail.anchorMidi, q.detail.targetMidi]);
+        q = round.next(true);
+      }
+      assert.equal(n, 20);
+    }
+  }
+});
+
+test('音当て: シャッフル袋はプール内非反復・補充境界で直前を避ける', () => {
+  for (const seed of [1, 2, 3, 7, 13, 42, 99]) {
+    for (const range of RANGE_OPTIONS) {
+      const deck = createTargetDeck(range.pool, makeRng(seed));
+      const seen = [];
+      const poolSize = range.pool.length;
+      for (let i = 0; i < poolSize * 3; i++) seen.push(deck.next());
+      for (let cycle = 0; cycle < 3; cycle++) {
+        const slice = seen.slice(cycle * poolSize, (cycle + 1) * poolSize);
+        assert.equal(new Set(slice).size, poolSize);
+        assert.deepEqual([...slice].sort((a, b) => a - b), [...range.pool].sort((a, b) => a - b));
+      }
+      for (let i = poolSize; i < seen.length; i += poolSize) {
+        assert.notEqual(seen[i], seen[i - 1]);
+      }
+    }
+  }
+});
+
+test('音当て: 弦指マッピング代表値', () => {
+  const cases = [
+    [55, 'G線', 0, 'G線開放', 55],
+    [60, 'G線', 3, 'G線3指', 55], // C4 境界はG線
+    [62, 'D線', 0, 'D線開放', 62],
+    [65, 'D線', 2, 'D線2指', 62], // F4 = 3半音
+    [67, 'D線', 3, 'D線3指', 62], // G4 はD線側
+    [72, 'A線', 2, 'A線2指', 69], // C5 = 3半音
+    [83, 'E線', 4, 'E線4指', 76], // B5
+  ];
+  for (const [midi, stringName, finger, label, anchor] of cases) {
+    const m = mapTarget(midi);
+    assert.equal(m.stringName, stringName);
+    assert.equal(m.finger, finger);
+    assert.equal(m.mappingLabel, label);
+    assert.equal(m.anchorMidi, anchor);
+  }
+  assert.deepEqual(STRING_NATURALS.flat(), [
+    55, 57, 59, 60, 62, 64, 65, 67, 69, 71, 72, 74, 76, 77, 79, 81, 83,
+  ]);
+});
+
+test('音当て: 説明文に科学的ピッチと弦指が入る', () => {
+  const q = oto
+    .createRound({ range: '7' }, makeRng(5), { settings: { questionCount: 1, noteStyle: 'abc' } })
+    .next(null);
+  assert.match(q.explain, /[A-G]\d/);
+  assert.match(q.explain, /線/);
+  assert.match(oto.subtitle, /開放弦/);
+  assert.match(oto.setup[0].hint, /絶対音感テストではありません/);
+  assert.equal(oto.setup[0].hint.includes('科学的に最適'), false);
 });
 
 test('設定の問題数が全モードに効く', () => {
@@ -122,20 +200,6 @@ test('設定の問題数が全モードに効く', () => {
     const roundDef = mode.createRound({}, makeRng(1), { settings: {} });
     assert.equal(roundDef.total, 5);
   }
-});
-
-test('音当て: 全問 untilCorrect（正解を押すまで進まない）', () => {
-  const round = oto.createRound({ stage: 'diatonic', accidental: 'none' }, makeRng(7), {
-    settings: { questionCount: 5, noteStyle: 'doremi' },
-  });
-  let q = round.next(null);
-  let n = 0;
-  while (q) {
-    n++;
-    assert.equal(q.untilCorrect, true);
-    q = round.next(true);
-  }
-  assert.equal(n, 5);
 });
 
 test('他モードは untilCorrect を持たない', () => {
@@ -189,7 +253,6 @@ test('和音当て和声的は3音・コードプール由来', () => {
   for (const n of q.play[0].notes) {
     assert.ok(n.midi >= 48 && n.midi <= 71);
   }
-  // 選択肢に品質名が出ない
   const joined = q.input.options.map((o) => o.label).join(',');
   assert.equal(joined.includes('メジャー'), false);
   assert.equal(joined.includes('長三和音'), false);

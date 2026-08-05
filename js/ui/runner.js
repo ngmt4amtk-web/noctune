@@ -1,9 +1,9 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0728a1';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0728a1';
-import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0728a1';
-import { createFingerboard } from './fingerboard.js?v=0728a1';
-import { scoreFor, makeRng } from '../engine.js?v=0728a1';
+import { freqOfMidi, detune } from '../theory.js?v=0805a1';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805a1';
+import { pop, shake, listenRipple, clearFlash } from './fx.js?v=0805a1';
+import { createFingerboard } from './fingerboard.js?v=0805a1';
+import { scoreFor, makeRng } from '../engine.js?v=0805a1';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;
@@ -23,6 +23,9 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   let finished = false;
   const log = [];
   let playEpoch = 0;
+
+  // スタートの select SFX がキャリブレーションに被らないよう、ラウンド実開始時に止める
+  synth.stopAll?.();
 
   container.innerHTML = '';
   const root = el('div', 'runner');
@@ -205,32 +208,37 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       if (q.input && q.input.kind === 'buttons') {
         // untilCorrect: 誤答は潰して継続、正解を押すまで進まない。採点は最初のタップ
         let firstResponse = null;
-        const grid = answerGrid(q.input.options, (val, idx) => {
-          const label = typeof q.input.options[idx] === 'string' ? q.input.options[idx] : q.input.options[idx]?.label;
-          const response = { kind: 'buttons', index: idx, value: val, label };
-          if (q.untilCorrect && idx !== q.input.correct) {
-            if (!firstResponse) firstResponse = response;
-            const btn = grid.querySelector(`button[data-index="${idx}"]`);
-            if (btn) {
-              btn.disabled = true;
-              btn.classList.add('is-wrong');
-              shake && shake(btn);
+        const useFx = q.feedbackFx !== false;
+        const grid = answerGrid(
+          q.input.options,
+          (val, idx) => {
+            const label = typeof q.input.options[idx] === 'string' ? q.input.options[idx] : q.input.options[idx]?.label;
+            const response = { kind: 'buttons', index: idx, value: val, label };
+            if (q.untilCorrect && idx !== q.input.correct) {
+              if (!firstResponse) firstResponse = response;
+              const btn = grid.querySelector(`button[data-index="${idx}"]`);
+              if (btn) {
+                btn.disabled = true;
+                btn.classList.add('is-wrong');
+                shake && shake(btn);
+              }
+              if (useFx) synth.playFx && synth.playFx('wrong');
+              revealHint();
+              guideBtn.classList.add('is-recommended');
+              return;
             }
-            synth.playFx && synth.playFx('wrong');
-            revealHint();
-            guideBtn.classList.add('is-recommended');
-            return;
-          }
-          if (q.untilCorrect) {
-            const btn = grid.querySelector(`button[data-index="${idx}"]`);
-            if (btn) btn.classList.add('is-correct');
-          }
-          if (firstResponse) {
-            done({ ...firstResponse, corrected: true, assisted });
-          } else {
-            done({ ...response, corrected: assisted, assisted });
-          }
-        });
+            if (q.untilCorrect) {
+              const btn = grid.querySelector(`button[data-index="${idx}"]`);
+              if (btn) btn.classList.add('is-correct');
+            }
+            if (firstResponse) {
+              done({ ...firstResponse, corrected: true, assisted });
+            } else {
+              done({ ...response, corrected: assisted, assisted });
+            }
+          },
+          { layout: q.input.layout, cols: q.input.cols }
+        );
         answerArea.append(grid);
       } else if (q.input && q.input.kind === 'pitch-set') {
         answerArea.append(pitchSetPicker(q.input, (res) => done(res)));
@@ -345,20 +353,21 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
   }
 
   async function handleResult(q, correct, response) {
+    const useFx = q.feedbackFx !== false;
     if (correct) {
       correctCount++;
       streak++;
       score += scoreFor({ correct: true, streakNow: streak });
       feedbackEl.textContent = q.explain ? `正解 — ${q.explain}` : '正解';
       feedbackEl.classList.add('is-correct');
-      synth.playFx && synth.playFx('correct');
+      if (useFx) synth.playFx && synth.playFx('correct');
       pop && pop(feedbackEl);
       clearFlash(stage);
     } else if (q.untilCorrect && (response?.corrected || response?.assisted)) {
       streak = 0;
       feedbackEl.textContent = q.explain ? `確認できた — ${q.explain}` : '確認できた';
       feedbackEl.classList.add('is-coached');
-      synth.playFx && synth.playFx('correct');
+      if (useFx) synth.playFx && synth.playFx('correct');
       pop && pop(feedbackEl);
       clearFlash(stage);
     } else {
@@ -367,12 +376,16 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       feedbackEl.classList.add('is-wrong');
       // untilCorrect は誤答タップごとに鳴らし済み。正解到達の瞬間に再びブザーを鳴らさない
       if (!q.untilCorrect) {
-        synth.playFx && synth.playFx('wrong');
+        if (useFx) synth.playFx && synth.playFx('wrong');
         shake && shake(stage);
       }
     }
     h.update({ current: asked, total, score, combo: streak });
     await sleep(q.explain ? FEEDBACK_MS_LONG : FEEDBACK_MS);
+    if (!correct && Array.isArray(q.feedbackPlayOnWrong) && q.feedbackPlayOnWrong.length) {
+      const epoch = ++playEpoch;
+      await playSteps(q.feedbackPlayOnWrong, () => !aborted && container.isConnected && epoch === playEpoch);
+    }
     synth.stopAll();
   }
 
