@@ -1,9 +1,9 @@
 // 画面遷移 — NOCTUNE（斜め構図・画面固有レイアウト・絵文字なし）
-import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0805c1';
-import { iconEl } from './icons.js?v=0805c1';
-import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0805c1';
-import { freqOfMidi, detune } from '../theory.js?v=0805c1';
-import { isImageIcon } from './icons.js?v=0805c1';
+import { bigButton, gameCard, el, iconButton, optionPanels } from './components.js?v=0805d1';
+import { iconEl } from './icons.js?v=0805d1';
+import { APP_TITLE, APP_ICON, QUESTION_COUNTS, applyIdentity } from '../identity.js?v=0805d1';
+import { freqOfMidi, detune } from '../theory.js?v=0805d1';
+import { isImageIcon } from './icons.js?v=0805d1';
 
 let deps = null;
 

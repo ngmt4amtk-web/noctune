@@ -1,13 +1,13 @@
 // 音当て: 開放弦を基準に、バイオリン第1ポジションの音名を当てる練習
-import { noteNamesFor, STRINGS, positionsForString, WHITE_PCS } from '../theory.js?v=0805c1';
-import { resolveQuestionCount } from '../identity.js?v=0805c1';
-import { shuffle } from '../engine.js?v=0805c1';
+import { noteNamesFor, STRINGS, positionsForString, WHITE_PCS } from '../theory.js?v=0805d1';
+import { resolveQuestionCount } from '../identity.js?v=0805d1';
+import { shuffle } from '../engine.js?v=0805d1';
 
 export const RANGE_OPTIONS = [
   {
     value: '7',
     label: '1オクターブ',
-    sub: 'C4〜B4。白鍵なら7音・♯／♭なら12音',
+    sub: 'C4〜B4。開放弦そのものを除き、白鍵は7択・♯／♭は12択',
     start: 60,
     end: 71,
   },
@@ -61,8 +61,11 @@ export function buildPool(rangeId, tones) {
   const range = RANGE_BY_ID[resolveRange({ range: rangeId })];
   const all = [];
   for (let midi = range.start; midi <= range.end; midi++) all.push(midi);
-  if (tones === 'white') return all.filter((midi) => WHITE_PCS.includes(pcOf(midi)));
-  return all;
+  // 基準として先に聴かせる開放弦と同じ高さは問題音にしない。
+  // 同じ音名の別オクターブは、相対的な距離が異なるため残す。
+  const targets = all.filter((midi) => !CALIBRATION_MIDIS.includes(midi));
+  if (tones === 'white') return targets.filter((midi) => WHITE_PCS.includes(pcOf(midi)));
+  return targets;
 }
 
 /**
@@ -201,6 +204,7 @@ function makeQuestion({ targetMidi, style, tones, openEach }) {
     streakFx: 'otoStreak',
     wrongFx: 'otoWrong',
     rewardBurst: true,
+    untilCorrect: true,
     feedbackPlayOnWrong: anchorTargetPlay(mapped.anchorMidi, targetMidi),
     replay: true,
     explain: `${pcLabel}（${sciName}・${mapped.mappingLabel}）`,
@@ -233,7 +237,7 @@ export default {
       label: '音域',
       layout: 'panels',
       hint:
-        'STARTでソ・レ・ラ・ミを一度確認。最後の音名を答える、開放弦との距離を使う相対音感練習です（絶対音感テストではありません）。',
+        'STARTでソ・レ・ラ・ミを一度確認。開放弦そのものは出題せず、最後の音名を正解するまで答えます（絶対音感テストではありません）。',
       options: RANGE_OPTIONS.map(({ value, label, sub }) => ({ value, label, sub })),
       default: '7',
     },

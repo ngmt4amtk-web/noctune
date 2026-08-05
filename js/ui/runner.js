@@ -1,9 +1,9 @@
 // ランナー: 早押し・stopAll・pitch-set・問別ログ
-import { freqOfMidi, detune } from '../theory.js?v=0805c1';
-import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805c1';
-import { pop, shake, listenRipple, clearFlash, rewardBurst } from './fx.js?v=0805c1';
-import { createFingerboard } from './fingerboard.js?v=0805c1';
-import { scoreFor, makeRng } from '../engine.js?v=0805c1';
+import { freqOfMidi, detune } from '../theory.js?v=0805d1';
+import { answerGrid, hud, pitchSetPicker } from './components.js?v=0805d1';
+import { pop, shake, listenRipple, clearFlash, rewardBurst } from './fx.js?v=0805d1';
+import { createFingerboard } from './fingerboard.js?v=0805d1';
+import { scoreFor, makeRng } from '../engine.js?v=0805d1';
 
 const FEEDBACK_MS = 700;
 const FEEDBACK_MS_LONG = 1100;
@@ -276,7 +276,6 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       if (q.input && q.input.kind === 'buttons') {
         // untilCorrect: 誤答は潰して継続、正解を押すまで進まない。採点は最初のタップ
         let firstResponse = null;
-        const useFx = q.feedbackFx !== false && !q.wrongFx;
         const grid = answerGrid(
           q.input.options,
           (val, idx) => {
@@ -290,7 +289,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
                 btn.classList.add('is-wrong');
                 shake && shake(btn);
               }
-              if (useFx) synth.playFx && synth.playFx('wrong');
+              playAnswerFx(q, false);
               revealHint();
               guideBtn.classList.add('is-recommended');
               return;
@@ -438,7 +437,7 @@ export async function runRound({ mode, config, synth, container, settings = {}, 
       streak = 0;
       feedbackEl.textContent = q.explain ? `確認できた — ${q.explain}` : '確認できた';
       feedbackEl.classList.add('is-coached');
-      if (useFx) synth.playFx && synth.playFx('correct');
+      playAnswerFx(q, true);
       pop && pop(feedbackEl);
       clearFlash(stage);
     } else {

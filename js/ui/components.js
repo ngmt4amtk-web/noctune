@@ -1,6 +1,6 @@
 // UI部品 — NOCTUNE 斜めガラス／画像アイコン
 
-import { iconEl, isImageIcon } from './icons.js?v=0805c1';
+import { iconEl, isImageIcon } from './icons.js?v=0805d1';
 
 function el(tag, props = {}, children = []) {
   const node = document.createElement(tag);

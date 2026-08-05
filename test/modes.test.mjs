@@ -32,7 +32,7 @@ function noteMidis(steps) {
 }
 
 function assertCleanQuestion(q) {
-  assert.equal(q.untilCorrect, undefined);
+  assert.equal(q.untilCorrect, true);
   assert.equal(q.guidePlay, undefined);
   assert.equal(q.timeLimitMs, undefined);
   assert.equal(q.feedbackFx, true);
@@ -75,8 +75,9 @@ test('音当て: setupは音域・使う音・表記・毎問の開放弦の3項
     oto.setup[0].options.map((o) => o.label),
     ['1オクターブ', '2オクターブ', 'バイオリン音域']
   );
-  assert.match(oto.setup[0].options[0].sub, /白鍵なら7音/);
-  assert.match(oto.setup[0].options[0].sub, /12音/);
+  assert.match(oto.setup[0].options[0].sub, /開放弦そのものを除き/);
+  assert.match(oto.setup[0].options[0].sub, /白鍵は7択/);
+  assert.match(oto.setup[0].options[0].sub, /12択/);
   assert.deepEqual(
     oto.setup[1].options.map((o) => o.value),
     ['white', 'sharp', 'flat']
@@ -111,15 +112,21 @@ test('音当て: setupは音域・使う音・表記・毎問の開放弦の3項
 });
 
 test('音当て: 白鍵／♯／♭のプール境界', () => {
-  assert.deepEqual(buildPool('7', 'white'), [60, 62, 64, 65, 67, 69, 71]);
-  assert.deepEqual(buildPool('7', 'sharp'), [...Array(12).keys()].map((i) => 60 + i));
+  assert.deepEqual(buildPool('7', 'white'), [60, 64, 65, 67, 71]);
+  assert.deepEqual(buildPool('7', 'sharp'), [60, 61, 63, 64, 65, 66, 67, 68, 70, 71]);
   assert.deepEqual(buildPool('7', 'flat'), buildPool('7', 'sharp'));
-  assert.equal(buildPool('2oct', 'white').length, 14);
-  assert.equal(buildPool('2oct', 'sharp').length, 24);
-  assert.equal(buildPool('violin', 'white').length, 17);
-  assert.equal(buildPool('violin', 'sharp').length, 29);
-  assert.equal(buildPool('violin', 'sharp')[0], 55);
+  assert.equal(buildPool('2oct', 'white').length, 11);
+  assert.equal(buildPool('2oct', 'sharp').length, 21);
+  assert.equal(buildPool('violin', 'white').length, 13);
+  assert.equal(buildPool('violin', 'sharp').length, 25);
+  assert.equal(buildPool('violin', 'sharp')[0], 56);
   assert.equal(buildPool('violin', 'sharp').at(-1), 83);
+  for (const range of RANGE_OPTIONS) {
+    for (const tones of ['white', 'sharp', 'flat']) {
+      const pool = buildPool(range.value, tones);
+      assert.equal(pool.some((midi) => CALIBRATION_MIDIS.includes(midi)), false);
+    }
+  }
   for (const midi of buildPool('violin', 'white')) {
     assert.equal(WHITE_PCS.includes(((midi % 12) + 12) % 12), true);
   }
@@ -304,6 +311,7 @@ test('音当て: 1000seed×全音域×全表記で袋・正解ラベル・再生
           });
           assert.deepEqual(noteMidis(round.intro.play), CALIBRATION_MIDIS);
           const q = round.next(null);
+          assert.equal(CALIBRATION_MIDIS.includes(q.detail.targetMidi), false);
           assert.equal(q.input.options[q.input.correct].value, q.detail.targetPc);
           if (openEach === 'on') {
             assert.deepEqual(noteMidis(q.play), [q.detail.anchorMidi, q.detail.targetMidi]);
@@ -370,6 +378,8 @@ test('音当て専用SFX名がaudioにあり、既存correct/wrong/fanfareを壊
   const fxSrc = readFileSync(join(ROOT, 'js/ui/fx.js'), 'utf8');
   const cssSrc = readFileSync(join(ROOT, 'css/style.css'), 'utf8');
   assert.match(runnerSrc, /rewardBurst\(stage, \{ strong: streak >= 2 \}\)/);
+  assert.match(runnerSrc, /if \(q\.untilCorrect && idx !== q\.input\.correct\)[\s\S]*?playAnswerFx\(q, false\)[\s\S]*?return;/);
+  assert.match(runnerSrc, /q\.untilCorrect && \(response\?\.corrected \|\| response\?\.assisted\)[\s\S]*?playAnswerFx\(q, true\)/);
   assert.match(runnerSrc, /new MutationObserver/);
   assert.match(runnerSrc, /if \(container\.isConnected \|\| answered\) return/);
   assert.ok((runnerSrc.match(/if \(!container\.isConnected\) \{/g) || []).length >= 3);
@@ -377,7 +387,7 @@ test('音当て専用SFX名がaudioにあり、既存correct/wrong/fanfareを壊
   assert.match(cssSrc, /\.fx-reward-burst\.is-strong/);
 });
 
-test('キャッシュトークン0805c1が一貫', () => {
+test('キャッシュトークン0805d1が一貫', () => {
   const files = [
     'index.html',
     'js/asset-v.js',
@@ -391,9 +401,9 @@ test('キャッシュトークン0805c1が一貫', () => {
   for (const rel of files) {
     const src = readFileSync(join(ROOT, rel), 'utf8');
     assert.equal(src.includes('0805b1'), false, rel);
-    assert.equal(src.includes('0805c1'), true, rel);
+    assert.equal(src.includes('0805d1'), true, rel);
   }
-  assert.equal(readFileSync(join(ROOT, 'js/asset-v.js'), 'utf8').includes("ASSET_V = '0805c1'"), true);
+  assert.equal(readFileSync(join(ROOT, 'js/asset-v.js'), 'utf8').includes("ASSET_V = '0805d1'"), true);
 });
 
 test('設定の問題数が全モードに効く', () => {
